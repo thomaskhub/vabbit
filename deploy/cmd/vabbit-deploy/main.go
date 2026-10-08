@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,6 +29,8 @@ const usage = `vabbit-deploy: run Vabbit networks on bunny.net from a config fil
   vabbit-deploy apply                create or update every network in the file
   vabbit-deploy status               show each network's URL and health
   vabbit-deploy rotate-admin -n NAME replace a network's admin token
+                                     (apply/rotate-admin --login: save a new token
+                                     straight into your encrypted vabbit login)
   vabbit-deploy destroy -n NAME      delete a network's edge script and storage
 
 Common flags: -f FILE (default vabbit.toml), -n NAME (only this network).
@@ -148,10 +152,14 @@ func cmdApply(ctx context.Context, args []string, dry bool) error {
 	allowCIDR := fs.Bool("allow-cidr-change", false, "allow changing a network's CIDR (strands every enrolled device)")
 	tokenFile := fs.String("admin-token-file", "", "also append newly generated admin tokens to this file (mode 0600), for vabbit login --token-file")
 	noWait := fs.Bool("no-wait", false, "don't wait for the network to answer after publishing")
+	login := fs.Bool("login", false, "save a newly generated admin token straight into your vabbit admin login (encrypted with your master password) instead of printing it")
 	fs.Parse(args)
 	f, nets, client, err := c.load()
 	if err != nil {
 		return err
+	}
+	if *login && len(nets) != 1 {
+		return errors.New("--login needs a single network (-n NAME): vabbit keeps one admin login per machine")
 	}
 	code, err := scriptCode(f, c.script)
 	if err != nil {
@@ -172,13 +180,20 @@ func cmdApply(ctx context.Context, args []string, dry bool) error {
 			}
 		}
 		if res.AdminToken != "" {
-			fmt.Printf("\n  New admin token for %s (shown once, keep it secret):\n    %s\n", n.Name, res.AdminToken)
-			fmt.Printf("  Log in with: vabbit login --server %s\n\n", res.URL)
 			if *tokenFile != "" {
 				if err := appendSecret(*tokenFile, fmt.Sprintf("%s %s %s\n", n.Name, res.URL, res.AdminToken)); err != nil {
 					return err
 				}
 			}
+			if *login {
+				if err := vabbitLogin(n.Name, res.URL, res.AdminToken); err == nil {
+					continue
+				} else {
+					fmt.Fprintf(os.Stderr, "  vabbit login failed (%v); the token follows so it isn't lost\n", err)
+				}
+			}
+			fmt.Printf("\n  New admin token for %s (shown once, keep it secret):\n    %s\n", n.Name, res.AdminToken)
+			fmt.Printf("  Log in with: vabbit login --server %s\n\n", res.URL)
 		}
 	}
 	return nil
@@ -211,6 +226,7 @@ func cmdRotate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("rotate-admin", flag.ExitOnError)
 	c := commonFlags(fs)
 	tokenFile := fs.String("admin-token-file", "", "also append the new token to this file (mode 0600), for vabbit login --token-file")
+	login := fs.Bool("login", false, "save the new token straight into your vabbit admin login (encrypted with your master password) instead of printing it")
 	fs.Parse(args)
 	if c.network == "" {
 		return errors.New("rotate-admin needs -n NETWORK")
@@ -223,13 +239,25 @@ func cmdRotate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("New admin token for %s (shown once, keep it secret):\n  %s\n", nets[0].Name, tok)
-	fmt.Println("The old token stops working once Bunny has published the change.")
-	fmt.Println("Run `vabbit login` again with the new token. Devices are not affected;")
-	fmt.Println("check `vabbit keys ls` and `vabbit devices ls` if the old token may have leaked.")
 	if *tokenFile != "" {
-		return appendSecret(*tokenFile, fmt.Sprintf("%s %s %s\n", nets[0].Name, url, tok))
+		if err := appendSecret(*tokenFile, fmt.Sprintf("%s %s %s\n", nets[0].Name, url, tok)); err != nil {
+			return err
+		}
 	}
+	saved := false
+	if *login {
+		if err := vabbitLogin(nets[0].Name, url, tok); err != nil {
+			fmt.Fprintf(os.Stderr, "vabbit login failed (%v); the token follows so it isn't lost\n", err)
+		} else {
+			saved = true
+		}
+	}
+	if !saved {
+		fmt.Printf("New admin token for %s (shown once, keep it secret):\n  %s\n", nets[0].Name, tok)
+		fmt.Println("Run `vabbit login` again with the new token.")
+	}
+	fmt.Println("The old token stops working once Bunny has published the change. Devices are not")
+	fmt.Println("affected; check `vabbit keys ls` and `vabbit devices ls` if the old token may have leaked.")
 	return nil
 }
 
@@ -302,4 +330,33 @@ func appendSecret(path, line string) error {
 	}
 	_, err = fh.WriteString(line)
 	return err
+}
+
+// vabbitLogin hands a new admin token to `vabbit login` on stdin, so it is
+// stored encrypted with the admin's master password and never touches disk in
+// clear. It uses the vabbit binary next to this one, or the one on PATH.
+func vabbitLogin(network, url, token string) error {
+	if url == "" {
+		return errors.New("the network has no URL yet")
+	}
+	bin := "vabbit"
+	if self, err := os.Executable(); err == nil {
+		if p := filepath.Join(filepath.Dir(self), "vabbit"); fileExists(p) {
+			bin = p
+		}
+	}
+	path, err := exec.LookPath(bin)
+	if err != nil {
+		return fmt.Errorf("vabbit not found next to vabbit-deploy or on PATH: %w", err)
+	}
+	fmt.Printf("  saving the admin token for %s into your vabbit login\n", network)
+	cmd := exec.Command(path, "login", "--server", url, "--token-file", "-")
+	cmd.Stdin = strings.NewReader(token + "\n")
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
 }

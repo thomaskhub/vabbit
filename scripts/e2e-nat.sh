@@ -83,7 +83,7 @@ setup() { # nat mode: cone | symmetric
   sleep 1
 }
 
-export SSL_CERT_FILE="$W/cert.pem" XDG_CONFIG_HOME="$W/cfg"
+export SSL_CERT_FILE="$W/cert.pem" XDG_CONFIG_HOME="$W/cfg" VABBIT_ADMIN_PASSWORD=e2e-master-password
 SRV=https://9.9.9.20:8787
 STUN=9.9.9.9:3478,9.9.9.10:3478
 

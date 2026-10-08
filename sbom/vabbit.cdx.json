@@ -72,6 +72,29 @@
       "version": "v0.32.0"
     },
     {
+      "bom-ref": "pkg:golang/golang.org/x/term@v0.31.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7abc0390e2b532ccbaa1f7e6d663a0beca5292c9459c81ac167c4e2a8b9f837a"
+        }
+      ],
+      "name": "golang.org/x/term",
+      "purl": "pkg:golang/golang.org/x/term@v0.31.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.31.0"
+    },
+    {
       "bom-ref": "pkg:golang/golang.zx2c4.com/wireguard@v0.0.0-20250521234502-f333402bd9cb?type=module",
       "evidence": {
         "licenses": [
@@ -98,6 +121,8 @@
   "dependencies": [
     {
       "dependsOn": [
+        "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
+        "pkg:golang/golang.org/x/term@v0.31.0?type=module",
         "pkg:golang/golang.zx2c4.com/wireguard@v0.0.0-20250521234502-f333402bd9cb?type=module"
       ],
       "ref": "pkg:golang/vabbit@source?type=module#cmd/vabbit"
@@ -105,19 +130,27 @@
     {
       "dependsOn": [
         "pkg:golang/golang.org/x/net@v0.39.0?type=module",
-        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module",
+        "pkg:golang/golang.org/x/term@v0.31.0?type=module"
       ],
       "ref": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module"
     },
     {
       "dependsOn": [
         "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
-        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module",
+        "pkg:golang/golang.org/x/term@v0.31.0?type=module"
       ],
       "ref": "pkg:golang/golang.org/x/net@v0.39.0?type=module"
     },
     {
       "ref": "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+    },
+    {
+      "dependsOn": [
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+      ],
+      "ref": "pkg:golang/golang.org/x/term@v0.31.0?type=module"
     },
     {
       "dependsOn": [

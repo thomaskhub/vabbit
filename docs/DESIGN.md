@@ -22,9 +22,12 @@ There are three kinds of token, all 256-bit random values. The server stores
 only their SHA-256 hashes and compares in constant time.
 
 1. **Admin token** (`vba_…`). Generated once with `vabbit admin-token`. Its
-   SHA-256 goes into the edge script secret `ADMIN_TOKEN_SHA256`. The plaintext
-   lives only in the admin's `~/.config/vabbit/admin.json` (mode 0600) after
-   `vabbit login`.
+   SHA-256 goes into the edge script secret `ADMIN_TOKEN_SHA256`. The token
+   itself lives only in the admin's `~/.config/vabbit/admin.json` (mode 0600) after
+   `vabbit login`, encrypted with a master password (Argon2id, 64 MiB, then
+   XChaCha20-Poly1305 with the server URL as associated data, so the file can't be
+   repointed at another server). `--no-password` stores it unencrypted for
+   unattended machines.
 2. **Setup key** (`vbk_…`). Created by the admin. One-time by default, with an
    expiry (default 24h, or never) and optional use limit. Used once by a device
    to enroll. Can carry a device lifetime (`--device-ttl`): devices enrolled

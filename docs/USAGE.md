@@ -36,8 +36,10 @@ In Bunny: create a Storage zone `home-state`, create an Edge Script from
 
 ```console
 $ vabbit login --server https://home-net.b-cdn.net
-Admin token: vba_Q3x…k9w
-Logged in to network "home" (100.92.0.0/16). Credentials saved to ~/.config/vabbit/admin.json
+Admin token:
+Master password (protects the token on this machine):
+Repeat master password:
+Logged in to network "home" (100.92.0.0/16). Credentials saved to ~/.config/vabbit/admin.json (encrypted with your master password)
 ```
 
 ## 2. The hub (cloud VM with a public IP)

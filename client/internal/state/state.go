@@ -24,11 +24,6 @@ type Device struct {
 	Endpoint    string `json:"endpoint,omitempty"`
 }
 
-type Admin struct {
-	Server string `json:"server"`
-	Token  string `json:"token"`
-}
-
 const DefaultDir = "/var/lib/vabbit"
 
 func DevicePath(dir, iface string) string { return filepath.Join(dir, iface+".json") }

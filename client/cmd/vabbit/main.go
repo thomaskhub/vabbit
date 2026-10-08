@@ -22,6 +22,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"golang.org/x/term"
+
 	"vabbit/internal/agent"
 	"vabbit/internal/api"
 	"vabbit/internal/state"
@@ -34,8 +36,8 @@ const usage = `vabbit - tiny WireGuard networks managed from a Bunny Edge Script
 
 Admin:
   vabbit admin-token                       generate an admin token and its SHA-256 for the edge script
-  vabbit login --server URL [--token T | --token-file F]
-                                           save admin credentials (prompts for the token if omitted)
+  vabbit login --server URL [--token T | --token-file F] [--no-password]
+                                           save admin credentials, encrypted with a master password
   vabbit logout
   vabbit keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
   vabbit keys ls
@@ -115,7 +117,8 @@ func cmdLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
 	server := fs.String("server", "", "control plane URL, e.g. https://mynet.b-cdn.net")
 	token := fs.String("token", "", "admin token (prompted if omitted)")
-	tokenFile := fs.String("token-file", "", "read the admin token from this file (mode 0600): just the token, or the file vabbit-deploy --admin-token-file writes")
+	tokenFile := fs.String("token-file", "", "read the admin token from this file (mode 0600), or - for stdin: just the token, or the file vabbit-deploy --admin-token-file writes")
+	noPassword := fs.Bool("no-password", false, "store the token unencrypted (for unattended machines); default: protect it with a master password")
 	fs.Parse(args)
 	if *tokenFile != "" {
 		if *token != "" {
@@ -130,12 +133,11 @@ func cmdLogin(ctx context.Context, args []string) error {
 		return errors.New("--server is required")
 	}
 	if *token == "" {
-		fmt.Fprint(os.Stderr, "Admin token: ")
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil && line == "" {
+		t, err := readSecret("Admin token: ")
+		if err != nil {
 			return err
 		}
-		*token = strings.TrimSpace(line)
+		*token = t
 	}
 	base, err := api.ValidateServer(*server)
 	if err != nil {
@@ -153,11 +155,101 @@ func cmdLogin(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := state.Save(path, state.Admin{Server: base, Token: *token}); err != nil {
+	var pw []byte
+	if !*noPassword {
+		if pw, err = newMasterPassword(); err != nil {
+			return err
+		}
+	}
+	if err := state.SaveAdmin(path, state.Admin{Server: base, Token: *token}, pw); err != nil {
 		return err
 	}
-	fmt.Printf("Logged in to network %q (%s). Credentials saved to %s\n", n.Name, n.CIDR, path)
+	how := "encrypted with your master password"
+	if *noPassword {
+		how = "unencrypted"
+	}
+	fmt.Printf("Logged in to network %q (%s). Credentials saved to %s (%s)\n", n.Name, n.CIDR, path, how)
 	return nil
+}
+
+// passwordEnv lets scripts supply the master password without a terminal.
+const passwordEnv = "VABBIT_ADMIN_PASSWORD"
+
+// tty returns the terminal to prompt on: stdin, or /dev/tty when stdin is a
+// pipe (e.g. the token is piped in), or nil when there is none.
+func tty() *os.File {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return os.Stdin
+	}
+	if f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		if term.IsTerminal(int(f.Fd())) {
+			return f
+		}
+		f.Close()
+	}
+	return nil
+}
+
+// promptSecret asks on the terminal without echo.
+func promptSecret(t *os.File, prompt string) (string, error) {
+	fmt.Fprint(os.Stderr, prompt)
+	b, err := term.ReadPassword(int(t.Fd()))
+	fmt.Fprintln(os.Stderr)
+	return strings.TrimSpace(string(b)), err
+}
+
+// readSecret reads a line without echo from the terminal, or from stdin when
+// it is piped.
+func readSecret(prompt string) (string, error) {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return promptSecret(os.Stdin, prompt)
+	}
+	return readLine(os.Stdin)
+}
+
+func readLine(r io.Reader) (string, error) {
+	line, err := bufio.NewReader(r).ReadString('\n')
+	if err != nil && line == "" {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+func newMasterPassword() ([]byte, error) {
+	if pw := os.Getenv(passwordEnv); pw != "" {
+		return []byte(pw), nil
+	}
+	t := tty()
+	if t == nil {
+		return nil, fmt.Errorf("no terminal to ask for a master password; set %s or use --no-password", passwordEnv)
+	}
+	pw, err := promptSecret(t, "Master password (protects the token on this machine): ")
+	if err != nil {
+		return nil, err
+	}
+	if len(pw) < 8 {
+		return nil, errors.New("master password must be at least 8 characters (or use --no-password)")
+	}
+	again, err := promptSecret(t, "Repeat master password: ")
+	if err != nil {
+		return nil, err
+	}
+	if again != pw {
+		return nil, errors.New("passwords don't match")
+	}
+	return []byte(pw), nil
+}
+
+func masterPassword() ([]byte, error) {
+	if pw := os.Getenv(passwordEnv); pw != "" {
+		return []byte(pw), nil
+	}
+	t := tty()
+	if t == nil {
+		return nil, fmt.Errorf("the admin login is password-protected; run in a terminal or set %s", passwordEnv)
+	}
+	pw, err := promptSecret(t, "Master password: ")
+	return []byte(pw), err
 }
 
 // readTokenFile reads an admin token from a file that holds either just the
@@ -165,16 +257,20 @@ func cmdLogin(ctx context.Context, args []string) error {
 // lines, the newest one for server wins; server may be empty when the file
 // names only one URL.
 func readTokenFile(path, server string) (string, string, error) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return "", "", err
+	fh := os.Stdin
+	if path != "-" {
+		var err error
+		if fh, err = os.Open(path); err != nil {
+			return "", "", err
+		}
+		defer fh.Close()
+		if st, err := fh.Stat(); err != nil {
+			return "", "", err
+		} else if st.Mode().Perm()&0o077 != 0 {
+			return "", "", fmt.Errorf("%s is readable by other users; chmod 600 it first", path)
+		}
 	}
-	defer fh.Close()
-	if st, err := fh.Stat(); err != nil {
-		return "", "", err
-	} else if st.Mode().Perm()&0o077 != 0 {
-		return "", "", fmt.Errorf("%s is readable by other users; chmod 600 it first", path)
-	}
+	var err error
 	want := ""
 	if server != "" {
 		if want, err = api.ValidateServer(server); err != nil {
@@ -240,7 +336,7 @@ func adminClient() (*api.Client, state.Admin, error) {
 	if err != nil {
 		return nil, a, err
 	}
-	if err := state.Load(path, &a); err != nil {
+	if a, err = state.LoadAdmin(path, masterPassword); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, a, errors.New("not logged in; run `vabbit login --server URL`")
 		}
@@ -623,7 +719,7 @@ func enroll(ctx context.Context, server, setupKey, name, endpoint string, port i
 		// Fall back to the admin login: mint a one-time key for ourselves.
 		c, a, err := adminClient()
 		if err != nil {
-			return dev, errors.New("first run needs --server and --setup-key (or VABBIT_SETUP_KEY), or an admin login")
+			return dev, fmt.Errorf("first run needs --server and --setup-key (or VABBIT_SETUP_KEY), or an admin login: %w", err)
 		}
 		if server == "" {
 			server = a.Server

@@ -39,22 +39,27 @@ config file, and is safe to run again after every change ([docs/DEPLOY.md](docs/
 make deploy && export BUNNY_API_KEY=...          # Bunny: Account settings > API key
 ./dist/vabbit-deploy init                        # writes vabbit.toml; edit it
 ./dist/vabbit-deploy plan                        # shows what would change
-./dist/vabbit-deploy apply --admin-token-file admin-tokens.txt
+./dist/vabbit-deploy apply -n home --login        # if you are also the admin (see below)
 ```
 
 **Where the admin token comes from.** Bunny only ever stores the token's hash, so the
 token itself exists in exactly one place: what `apply` hands you the first time it creates
 a network (later runs keep the existing token and print nothing).
 
-* `apply` always prints it once on screen.
-* `--admin-token-file admin-tokens.txt` also appends it to that file, which `apply`
+* **You are the admin too:** `apply -n NAME --login` hands the token straight to
+  `vabbit login`, which asks for your master password and stores it encrypted. The
+  token is never shown or written in clear. Needs `vabbit` next to `vabbit-deploy` or
+  on `PATH`.
+* **Someone else is the admin:** `apply` prints the token once on screen, and
+  `--admin-token-file admin-tokens.txt` also appends it to that file, which `apply`
   creates for you (mode 0600). Each line is `NETWORK URL TOKEN`:
   ```
   home https://vabbit-home.b-cdn.net vba_3kX…
   ```
-  `rotate-admin --admin-token-file …` appends the replacement token the same way.
+  `rotate-admin` takes `--login` and `--admin-token-file` the same way.
 
-Give the token (or the file) to the admin over a secure channel, then delete your copy.
+In the second case, give the token (or the file) to the admin over a secure channel,
+then delete your copy.
 The admin logs in with `vabbit login --token-file admin-tokens.txt`, or pastes the token
 into `vabbit login --server URL`. A lost token can't be recovered; make a new one with
 `vabbit-deploy rotate-admin -n NAME`.
@@ -75,6 +80,7 @@ into `vabbit login --server URL`. A lost token can't be recovered; make a new on
 | `--script FILE` | plan, apply | built in | Deploy this built edge script instead of the bundled one. |
 | `--allow-cidr-change` | plan, apply | off | Allow changing a network's CIDR. Every enrolled device must re-enroll. |
 | `--admin-token-file FILE` | apply, rotate-admin | | Also append new admin tokens to this file (mode 0600) as `NETWORK URL TOKEN` lines, for `vabbit login --token-file`. |
+| `--login` | apply, rotate-admin | off | Save a new admin token straight into your `vabbit login` (encrypted with your master password) instead of printing it. Needs a single network (`-n`). |
 | `--no-wait` | apply | off | Don't wait for the network to answer after publishing. |
 | `--yes` | destroy | off | Don't ask for confirmation. |
 
@@ -107,11 +113,14 @@ config (default `BUNNY_API_KEY`) and never written to a file.
 
 ## Admin: manage the network
 
-The admin logs in once per machine; the login is stored in `~/.config/vabbit/admin.json`
-(mode 0600). Keep it on your own laptop, not on servers.
+The admin logs in once per machine. The login is stored in `~/.config/vabbit/admin.json`
+(mode 0600) with the token **encrypted by a master password** you choose at login
+(Argon2id + XChaCha20-Poly1305), so a stolen laptop disk or backup doesn't give away
+the network. Admin commands ask for the master password each time; scripts can set
+`VABBIT_ADMIN_PASSWORD` instead. Keep the login on your own laptop, not on servers.
 
 ```sh
-vabbit login --server https://mynet.b-cdn.net            # prompts for the vba_ token
+vabbit login --server https://mynet.b-cdn.net            # prompts for the token and a master password
 vabbit login --token-file admin-tokens.txt               # or from the file vabbit-deploy apply wrote
 
 vabbit keys create                     # one-time setup key for a new device (valid 24h)
@@ -139,7 +148,8 @@ vabbit devices rm <id>                 # cut off on its next sync (≤15s)
 |---|---|---|
 | `--server URL` | | Control plane URL, e.g. `https://mynet.b-cdn.net`. |
 | `--token TOKEN` | prompted | Admin token (`vba_…`). Leave it out to be prompted, so it stays out of shell history. |
-| `--token-file FILE` | | Read the token from a file (mode 0600): just the token, or the lines `vabbit-deploy --admin-token-file` writes. Then the newest token for `--server` is used, and `--server` can be left out if the file names one network. |
+| `--no-password` | off | Store the token unencrypted, for unattended machines without anyone to type a password. |
+| `--token-file FILE` | | Read the token from a file (mode 0600), or `-` for stdin: just the token, or the lines `vabbit-deploy --admin-token-file` writes. Then the newest token for `--server` is used, and `--server` can be left out if the file names one network. |
 
 **`vabbit keys create`**
 

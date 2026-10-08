@@ -76,7 +76,9 @@ $ vabbit-deploy destroy -n home        # asks you to type the name first
 
 Every command exits non-zero on failure, so it fits in shell scripts and pipelines.
 Admin tokens are printed once, by the `apply` that creates a network and by
-`rotate-admin`. To capture them, pass `--admin-token-file FILE`: the file is created
+`rotate-admin`. If you are the admin, pass `--login` (with `-n NAME`) instead: the token
+goes straight into `vabbit login`, encrypted with your master password, and is never
+printed. To hand it to someone else, pass `--admin-token-file FILE`: the file is created
 (mode 0600) if missing and gets one `NETWORK URL TOKEN` line per new token. The admin
 then logs in with `vabbit login --token-file FILE`. `--no-wait` skips the health check after publishing.
 
