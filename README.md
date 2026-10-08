@@ -19,28 +19,64 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
 
 See [docs/USAGE.md](docs/USAGE.md) for a full walkthrough and [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
 
-## 1. Deploy a network (once per network)
+## Who runs what
 
-The quick way, with a config file and the Bunny API ([docs/DEPLOY.md](docs/DEPLOY.md)):
+| Role | Tool | Does |
+|---|---|---|
+| [Infrastructure](#infrastructure-deploy-a-network) | `vabbit-deploy` | Creates the network on bunny.net, once per network. Needs the Bunny API key. |
+| [Admin](#admin-manage-the-network) | `vabbit` | Logs in with the admin token, hands out setup keys, manages devices and hubs. |
+| [Users](#users-connect-a-device) | `vabbit` | Connects a laptop, server or VM with a setup key. Needs root, no admin rights. |
+
+A typical first setup: infrastructure deploys the network, the admin logs in and
+[sets up a hub](#setting-up-a-hub), and users join with setup keys.
+
+## Infrastructure: deploy a network
+
+`vabbit-deploy` creates a private storage zone and an edge script per network from a
+config file, and is safe to run again after every change ([docs/DEPLOY.md](docs/DEPLOY.md)).
 
 ```sh
-make deploy && export BUNNY_API_KEY=...
-./dist/vabbit-deploy init      # writes vabbit.toml; edit it
-./dist/vabbit-deploy apply     # creates storage + edge script, prints URL and admin token
+make deploy && export BUNNY_API_KEY=...          # Bunny: Account settings > API key
+./dist/vabbit-deploy init                        # writes vabbit.toml; edit it
+./dist/vabbit-deploy plan                        # shows what would change
+./dist/vabbit-deploy apply --admin-token-file admin-tokens.txt
 ```
 
-Or by hand in the Bunny dashboard:
+`apply` prints each network's URL and, on first deploy, its admin token. Hand both to
+the admin; with `--admin-token-file` the admin can log in straight from that file.
+
+| Command | What it does |
+|---|---|
+| `vabbit-deploy init` | Write an example config file. |
+| `vabbit-deploy plan` | Show what `apply` would change, without changing anything. |
+| `vabbit-deploy apply` | Create or update every network on Bunny. Safe to run repeatedly. |
+| `vabbit-deploy status` | Show each network's URL and whether it answers. |
+| `vabbit-deploy rotate-admin -n NAME` | Replace a network's admin token and print the new one. |
+| `vabbit-deploy destroy -n NAME` | Delete a network's edge script and storage zone. Asks you to type the name. |
+
+| Flag | Commands | Default | Meaning |
+|---|---|---|---|
+| `-f FILE` | all | `vabbit.toml` | Config file (for `init`: the file to write). |
+| `-n NAME` | plan, apply, status, rotate-admin, destroy | all networks | Only this network. Required for `rotate-admin` and `destroy`. |
+| `--script FILE` | plan, apply | built in | Deploy this built edge script instead of the bundled one. |
+| `--allow-cidr-change` | plan, apply | off | Allow changing a network's CIDR. Every enrolled device must re-enroll. |
+| `--admin-token-file FILE` | apply, rotate-admin | | Also append new admin tokens to this file (mode 0600) as `NETWORK URL TOKEN` lines, for `vabbit login --token-file`. |
+| `--no-wait` | apply | off | Don't wait for the network to answer after publishing. |
+| `--yes` | destroy | off | Don't ask for confirmation. |
+
+The Bunny API key is read from the environment variable named by `api_key_env` in the
+config (default `BUNNY_API_KEY`) and never written to a file.
+
+<details>
+<summary>Without vabbit-deploy: set it up by hand in the Bunny dashboard</summary>
 
 1. Build the client (`make client`, Go 1.22+) or download a CI artifact.
-2. Generate the admin token:
-   ```sh
-   ./dist/vabbit admin-token
-   ```
-   Keep the `vba_…` token. You'll paste its SHA-256 into Bunny.
-3. In Bunny: create a **Storage zone** (e.g. `mynet-state`). Do **not** connect a pull
-   zone to it. Copy its password (FTP & API Access → Password).
-4. In Bunny: create a **standalone Edge Script**, paste `edge/dist/edge-script.js`
-   (from `make edge`) or connect this repo with `edge/src/main.ts` as the entry, then set:
+2. Generate the admin token with `./dist/vabbit admin-token`. Keep the `vba_…` token;
+   you'll paste its SHA-256 into Bunny.
+3. Create a **Storage zone** (e.g. `mynet-state`). Do **not** connect a pull zone to it.
+   Copy its password (FTP & API Access → Password).
+4. Create a **standalone Edge Script**, paste `edge/dist/edge-script.js` (from
+   `make edge`) or connect this repo with `edge/src/main.ts` as the entry, then set:
 
    | Name | Kind | Value |
    |---|---|---|
@@ -53,64 +89,35 @@ Or by hand in the Bunny dashboard:
 
    The script answers `503 server misconfigured` until all required values are set.
 
-## 2. Log in and add devices
+</details>
+
+## Admin: manage the network
+
+The admin logs in once per machine; the login is stored in `~/.config/vabbit/admin.json`
+(mode 0600). Keep it on your own laptop, not on servers.
 
 ```sh
-vabbit login --server https://mynet.b-cdn.net      # prompts for the vba_ token
+vabbit login --server https://mynet.b-cdn.net            # prompts for the vba_ token
+vabbit login --token-file admin-tokens.txt               # or read it from vabbit-deploy's file
 
-# Recommended: a machine with a public IP (e.g. a small cloud VM) that relays when a
-# direct path can't be punched or UDP is blocked. Open UDP 51820 and TCP 443 in its
-# firewall. Only the admin can make a hub (it sees relayed traffic), so do this
-# where you're logged in:
-sudo vabbit up --endpoint 203.0.113.10:51820 --hub     # --tcp-relay off to skip TCP 443
-
-# Any other machine where you're not logged in as admin:
-vabbit keys create                                 # prints a one-time vbk_ key (24h)
-sudo VABBIT_SETUP_KEY=vbk_... vabbit up --server https://mynet.b-cdn.net
-```
-
-On a machine where you're logged in as admin, `sudo vabbit up` mints its own
-one-time key. Devices need `iproute2` and `/dev/net/tun`; WireGuard itself is built in.
-Outbound UDP to STUN servers (default Cloudflare and Google, change with `--stun`) is
-used to discover the device's public address.
-
-To keep it running: `sudo cp packaging/vabbit@.service /etc/systemd/system/ &&
-sudo systemctl enable --now vabbit@vb0` after the first enrollment.
-
-## 3. Manage
-
-```sh
+vabbit keys create                     # one-time setup key for a new device (valid 24h)
+vabbit keys create --reusable --ttl 7d --device-ttl 30d  # e.g. for a fleet of short-lived VMs
 vabbit devices ls
-vabbit devices rm <id>         # device is cut off on its next sync (≤15s)
-vabbit devices set <id> --hub=true
-vabbit keys ls / keys rm <id>
-sudo vabbit status
-sudo vabbit leave              # a device removes itself
+vabbit devices set <id> --hub=true     # see "Setting up a hub"
+vabbit devices rm <id>                 # cut off on its next sync (≤15s)
 ```
-
-## Command reference
-
-### `vabbit` (devices and admin)
-
-Admin commands use the login stored in `~/.config/vabbit/admin.json`. Device commands
-(`up`, `down`, `leave`, `status`) need root and keep their state in `/var/lib/vabbit`.
 
 | Command | What it does |
 |---|---|
 | `vabbit login` | Log in as admin to a network. |
-| `vabbit logout` | Forget the admin login. |
-| `vabbit admin-token` | Print a new admin token and its SHA-256 (for manual setups without `vabbit-deploy`). |
+| `vabbit logout` | Forget the admin login on this machine. |
 | `vabbit keys create` | Create a setup key for enrolling a device. |
 | `vabbit keys ls` | List setup keys. |
 | `vabbit keys rm ID` | Delete a setup key. |
 | `vabbit devices ls` | List devices. |
-| `vabbit devices rm ID` | Remove a device; it is cut off on its next sync. |
 | `vabbit devices set ID` | Rename a device, make it a hub, or set when its access expires. |
-| `vabbit up` | Enroll this machine (first run) and run the tunnel. |
-| `vabbit down` | Stop the tunnel; the device stays enrolled. |
-| `vabbit leave` | Remove this device from the network and delete its local state. |
-| `vabbit status` | Show this device, its peers and how each is reached. |
-| `vabbit version` | Print the version. |
+| `vabbit devices rm ID` | Remove a device; it is cut off on its next sync. |
+| `vabbit admin-token` | Print a new admin token and its SHA-256 (only for manual setups). |
 
 **`vabbit login`**
 
@@ -118,7 +125,7 @@ Admin commands use the login stored in `~/.config/vabbit/admin.json`. Device com
 |---|---|---|
 | `--server URL` | | Control plane URL, e.g. `https://mynet.b-cdn.net`. |
 | `--token TOKEN` | prompted | Admin token (`vba_…`). Leave it out to be prompted, so it stays out of shell history. |
-| `--token-file FILE` | | Read the admin token from a file (must be mode 0600). The file holds just the token, or the `NETWORK URL TOKEN` lines that `vabbit-deploy --admin-token-file` writes; then the newest token for `--server` is used, and `--server` can be left out if the file names one network. |
+| `--token-file FILE` | | Read the token from a file (mode 0600): just the token, or the lines `vabbit-deploy --admin-token-file` writes. Then the newest token for `--server` is used, and `--server` can be left out if the file names one network. |
 
 **`vabbit keys create`**
 
@@ -137,15 +144,39 @@ Admin commands use the login stored in `~/.config/vabbit/admin.json`. Device com
 | `--hub=true\|false` | Make the device a hub, or stop it being one. A hub needs a public endpoint. |
 | `--expires DURATION` | Remove the device's access this long from now (e.g. `7d`), or `never`. |
 
+## Users: connect a device
+
+Get a setup key from the admin, then on the device (Linux, as root):
+
+```sh
+sudo VABBIT_SETUP_KEY=vbk_... vabbit up --server https://mynet.b-cdn.net --dry-run   # enroll
+sudo cp packaging/vabbit@.service /etc/systemd/system/
+sudo systemctl enable --now vabbit@vb0                                               # keep it running
+sudo vabbit status
+```
+
+`vabbit up` without `--dry-run` enrolls and runs the tunnel in the foreground instead.
+Devices need `iproute2` and `/dev/net/tun`; WireGuard itself is built in. Outbound UDP to
+STUN servers (default Cloudflare and Google) is used to discover the public address.
+To join a second network, use another interface: `--iface vb1` and `vabbit@vb1`.
+
+| Command | What it does |
+|---|---|
+| `vabbit up` | Enroll this machine (first run) and run the tunnel. |
+| `vabbit status` | Show this device, its peers and how each is reached. |
+| `vabbit down` | Stop the tunnel; the device stays enrolled. |
+| `vabbit leave` | Remove this device from the network and delete its local state. |
+| `vabbit version` | Print the version. |
+
 **`vabbit up`**
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--server URL` | | Control plane URL. Only needed on the first run. |
-| `--setup-key KEY` | `$VABBIT_SETUP_KEY` | One-time setup key for the first run. The environment variable keeps it out of the process list. Not needed when logged in as admin. |
+| `--setup-key KEY` | `$VABBIT_SETUP_KEY` | Setup key for the first run. The environment variable keeps it out of the process list. Not needed where the admin is logged in. |
 | `--name NAME` | hostname | Device name. |
 | `--endpoint HOST:PORT` | | Public address other devices can reach this one on. Required for a hub. |
-| `--hub` | off | Make this device the hub. Needs `--endpoint` and an admin login. |
+| `--hub` | off | Make this device the hub. Needs `--endpoint` and an admin login on this machine. |
 | `--port N` | `51820` | WireGuard UDP listen port. |
 | `--interval DURATION` | `15s` | How often to sync with the control plane. |
 | `--stun LIST` | Cloudflare and Google | Comma-separated STUN servers (`host:port`), or `none`. |
@@ -154,38 +185,56 @@ Admin commands use the login stored in `~/.config/vabbit/admin.json`. Device com
 | `--iface NAME` | `vb0` | WireGuard interface. Use a different one per network. |
 | `--state-dir DIR` | `/var/lib/vabbit` | Where enrollment state is kept. |
 
-`--endpoint` and `--port` given on a later run update the stored settings.
+`--endpoint` and `--port` are remembered, so the systemd service picks them up.
+`down`, `leave` and `status` take `--iface` and `--state-dir` too.
 
-**`vabbit down`, `vabbit leave`, `vabbit status`**
+## Setting up a hub
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `--iface NAME` | `vb0` | Which interface (network) to act on. |
-| `--state-dir DIR` | `/var/lib/vabbit` | Where enrollment state is kept. |
+A hub is an ordinary device with a public IP that relays for devices that can't reach
+each other directly (both behind strict NATs) and serves the TCP 443 fallback for
+networks that block UDP. Without a hub those devices can't connect.
 
-### `vabbit-deploy` (bunny.net)
+What it needs, either way:
+* A public IPv4 address, with **UDP 51820** and **TCP 443** open in its firewall
+  (or `--tcp-relay off` to skip the TCP fallback).
+* Only the admin can make a hub, because a hub can see the traffic it relays.
+* Today devices use the oldest hub only; a second one is a cold spare (switch it
+  with `vabbit devices set`).
 
-The Bunny API key is read from the environment variable named by `api_key_env` in the
-config (default `BUNNY_API_KEY`). See [docs/DEPLOY.md](docs/DEPLOY.md).
+**A. A separate small VM, used only as hub (recommended).** Any VM with 1 vCPU and
+512 MB is plenty; the admin token never touches it.
 
-| Command | What it does |
-|---|---|
-| `vabbit-deploy init` | Write an example config file. |
-| `vabbit-deploy plan` | Show what `apply` would change, without changing anything. |
-| `vabbit-deploy apply` | Create or update every network on Bunny. Safe to run repeatedly. |
-| `vabbit-deploy status` | Show each network's URL and whether it answers. |
-| `vabbit-deploy rotate-admin -n NAME` | Replace a network's admin token and print the new one. |
-| `vabbit-deploy destroy -n NAME` | Delete a network's edge script and storage zone. Asks you to type the name. |
+```sh
+# On your laptop (admin):
+vabbit keys create
 
-| Flag | Commands | Default | Meaning |
-|---|---|---|---|
-| `-f FILE` | all | `vabbit.toml` | Config file (for `init`: the file to write). |
-| `-n NAME` | plan, apply, status, rotate-admin, destroy | all networks | Only this network. Required for `rotate-admin` and `destroy`. |
-| `--script FILE` | plan, apply | built in | Deploy this built edge script instead of the bundled one. |
-| `--allow-cidr-change` | plan, apply | off | Allow changing a network's CIDR. Every enrolled device must re-enroll. |
-| `--admin-token-file FILE` | apply, rotate-admin | | Also append newly generated admin tokens to this file (mode 0600) as `NETWORK URL TOKEN` lines, ready for `vabbit login --token-file`. |
-| `--no-wait` | apply | off | Don't wait for the network to answer after publishing. |
-| `--yes` | destroy | off | Don't ask for confirmation. |
+# On the VM:
+sudo VABBIT_SETUP_KEY=vbk_... vabbit up --server https://mynet.b-cdn.net \
+    --endpoint 203.0.113.10:51820 --name hub --dry-run
+sudo cp packaging/vabbit@.service /etc/systemd/system/ && sudo systemctl enable --now vabbit@vb0
+
+# On your laptop again:
+vabbit devices ls                        # find the VM's id
+vabbit devices set <id> --hub=true
+```
+
+The VM picks up its new role on the next sync (≤15s) and starts relaying; check with
+`sudo vabbit status` on the VM (`Hub true`).
+
+**B. An existing device that already has a public IP**, e.g. a server already in the
+network. Tell it its public address, then promote it:
+
+```sh
+# On the device:
+sudo vabbit up --endpoint 203.0.113.10:51820 --dry-run   # stores the endpoint
+sudo systemctl restart vabbit@vb0
+
+# On your laptop (admin):
+vabbit devices set <id> --hub=true
+```
+
+Keep in mind this machine now carries other devices' relayed traffic, so pick one that
+has the bandwidth and that you trust. To stop: `vabbit devices set <id> --hub=false`.
 
 ## Connectivity
 
