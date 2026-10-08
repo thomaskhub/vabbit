@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"edgeguard/internal/agent"
 	"edgeguard/internal/api"
 	"edgeguard/internal/state"
 	"edgeguard/internal/wg"
@@ -41,7 +43,7 @@ Admin:
 
 Device (Linux, run as root):
   edgeguard up [--server URL] [--setup-key KEY] [--name NAME] [--endpoint HOST:PORT] [--hub]
-               [--port 51820] [--iface eg0] [--interval 30s] [--once] [--dry-run]
+               [--port 51820] [--iface eg0] [--interval 15s] [--stun host:port,...] [--dry-run]
   edgeguard down [--iface eg0]
   edgeguard leave [--iface eg0]               remove this device from the network
   edgeguard status [--iface eg0]
@@ -332,9 +334,9 @@ func cmdUp(ctx context.Context, args []string) error {
 	endpoint := fs.String("endpoint", "", "public HOST:PORT other devices can reach this one on")
 	hub := fs.Bool("hub", false, "make this device the hub that relays for devices behind NAT (needs --endpoint and an admin login)")
 	port := fs.Int("port", 0, "WireGuard listen port (default 51820)")
-	interval := fs.Duration("interval", 30*time.Second, "how often to sync with the control plane")
-	once := fs.Bool("once", false, "sync once, apply and exit (leaves the interface up)")
-	dryRun := fs.Bool("dry-run", false, "print the WireGuard config instead of applying it")
+	interval := fs.Duration("interval", 15*time.Second, "how often to sync with the control plane")
+	stunFlag := fs.String("stun", "", "comma-separated STUN servers host:port, or \"none\" (default Cloudflare and Google)")
+	dryRun := fs.Bool("dry-run", false, "enroll/sync once and print the peers instead of starting the interface")
 	fs.Parse(args)
 
 	if !*dryRun && os.Geteuid() != 0 {
@@ -344,7 +346,7 @@ func cmdUp(ctx context.Context, args []string) error {
 		return errors.New("--interval must be at least 5s")
 	}
 	if *endpoint != "" {
-		if err := wg.ValidateEndpoint(*endpoint); err != nil {
+		if err := agent.ValidateEndpoint(*endpoint); err != nil {
 			return err
 		}
 	}
@@ -401,46 +403,32 @@ func cmdUp(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	last := ""
-	failures := 0
-	for {
-		applied, err := syncOnce(ctx, c, dev, *df.iface, last, *dryRun)
-		switch {
-		case errors.Is(err, api.ErrUnauthorized):
-			if !*dryRun {
-				_ = wg.Down(*df.iface)
-			}
-			_ = state.Remove(path)
-			return errors.New("this device was removed from the network; local state cleared")
-		case err != nil:
-			failures++
-			fmt.Fprintf(os.Stderr, "sync failed (keeping current config): %v\n", err)
-			if *once {
-				return err
-			}
-		default:
-			failures = 0
-			last = applied
-		}
-		if *once {
-			return nil
-		}
-		wait := *interval
-		if failures > 0 {
-			wait = min(*interval*time.Duration(1<<min(failures, 4)), 5*time.Minute)
-		}
-		select {
-		case <-ctx.Done():
-			if !*dryRun {
-				if err := wg.Down(*df.iface); err != nil {
-					return err
-				}
-			}
-			fmt.Println("Interface down.")
-			return nil
-		case <-time.After(wait):
-		}
+	if *dryRun {
+		return dryRunSync(ctx, c, dev)
 	}
+	stunServers := agent.DefaultSTUN
+	if *stunFlag != "" {
+		stunServers = strings.Split(*stunFlag, ",")
+	}
+	if *stunFlag == "none" {
+		stunServers = nil
+	}
+	err = agent.Run(ctx, agent.Options{
+		Iface:        *df.iface,
+		Device:       dev,
+		Client:       c,
+		STUNServers:  stunServers,
+		SyncInterval: *interval,
+		Logf:         func(f string, a ...any) { log.Printf(f, a...) },
+	})
+	if errors.Is(err, agent.ErrRemoved) {
+		_ = state.Remove(path)
+		return errors.New("this device was removed from the network; interface removed and local state cleared")
+	}
+	if err == nil {
+		fmt.Println("Interface down.")
+	}
+	return err
 }
 
 // setHub promotes or demotes this device. Only the admin may do that, so it
@@ -451,7 +439,7 @@ func setHub(ctx context.Context, c *api.Client, dev state.Device, hub bool) erro
 	}
 	if hub {
 		// The server only accepts a hub that has an endpoint on record.
-		if _, err := c.Sync(ctx, dev.Endpoint); err != nil {
+		if _, err := c.Sync(ctx, dev.Endpoint, nil); err != nil {
 			return err
 		}
 	}
@@ -529,31 +517,25 @@ func enroll(ctx context.Context, server, setupKey, name, endpoint string, port i
 	}, nil
 }
 
-// syncOnce fetches the peer list and applies it if it changed. It returns the
-// rendered config that is now in effect.
-func syncOnce(ctx context.Context, c *api.Client, dev state.Device, iface, last string, dryRun bool) (string, error) {
-	s, err := c.Sync(ctx, dev.Endpoint)
+// dryRunSync syncs once and prints what the agent would configure.
+func dryRunSync(ctx context.Context, c *api.Client, dev state.Device) error {
+	pub, err := wg.PublicKey(dev.PrivateKey)
 	if err != nil {
-		return "", err
+		return err
 	}
-	cfg, err := wg.FromSync(s, dev.NetworkCIDR, dev.PrivateKey, dev.ListenPort)
+	s, err := c.Sync(ctx, dev.Endpoint, nil)
 	if err != nil {
-		return "", fmt.Errorf("rejected control plane data: %w", err)
+		return err
 	}
-	rendered := fmt.Sprintf("%s hub=%v\n%s", cfg.Address, s.Self.Hub, cfg.Render())
-	if rendered == last {
-		return last, nil
+	n, err := agent.Validate(s, dev.NetworkCIDR, pub)
+	if err != nil {
+		return fmt.Errorf("rejected control plane data: %w", err)
 	}
-	if dryRun {
-		fmt.Printf("# address %s on %s\n%s\n", cfg.Address, iface, strings.Replace(cfg.Render(), cfg.PrivateKey, "(hidden)", 1))
-		return rendered, nil
+	fmt.Printf("address %s (hub: %v), %d peer(s)\n", n.Address, n.SelfHub, len(n.Peers))
+	for _, p := range n.Peers {
+		fmt.Printf("  %-20s %-15s hub=%-5v endpoints=%s\n", p.Name, p.IP, p.Hub, strings.Join(p.Endpoints, ","))
 	}
-	// Only a hub forwards between peers.
-	if err := wg.Apply(iface, cfg, s.Self.Hub); err != nil {
-		return "", err
-	}
-	fmt.Printf("Applied config: %s, %d peer(s)\n", cfg.Address, len(cfg.Peers))
-	return rendered, nil
+	return nil
 }
 
 func cmdDown(args []string) error {
@@ -610,19 +592,50 @@ func cmdStatus(ctx context.Context, args []string) error {
 	if dev.Endpoint != "" {
 		fmt.Printf("Endpoint %s\n", dev.Endpoint)
 	}
-	if c, err := api.New(dev.Server, dev.DeviceToken); err == nil {
-		if s, err := c.Sync(ctx, dev.Endpoint); err == nil {
-			fmt.Printf("Hub      %v\n", s.Self.Hub)
-			fmt.Println("Peers:")
-			for _, p := range s.Peers {
-				fmt.Printf("  %-20s %s\n", p.Name, strings.Join(p.AllowedIPs, ","))
+	stats, err := wg.Show(*df.iface)
+	if err != nil {
+		fmt.Println("Agent    not running:", err)
+	}
+	c, err := api.New(dev.Server, dev.DeviceToken)
+	if err != nil {
+		return err
+	}
+	pub, _ := wg.PublicKey(dev.PrivateKey)
+	s, err := c.Sync(ctx, dev.Endpoint, nil)
+	if err != nil {
+		fmt.Println("Control plane:", err)
+		return nil
+	}
+	n, err := agent.Validate(s, dev.NetworkCIDR, pub)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Hub      %v\n\nPEERS\n", n.SelfHub)
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tIP\tPATH\tENDPOINT\tHANDSHAKE")
+	for _, p := range n.Peers {
+		st, ok := stats[p.PublicKey]
+		path, ep, hs := "-", "-", "never"
+		if ok {
+			alive := !st.LastHandshake.IsZero() && time.Since(st.LastHandshake) < 3*time.Minute
+			switch {
+			case alive && p.Hub && !n.SelfHub:
+				path = "direct (hub)"
+			case alive:
+				path = "direct"
+			case len(st.AllowedIPs) == 0:
+				path = "relay via hub"
+			default:
+				path = "connecting"
 			}
-		} else {
-			fmt.Println("Control plane:", err)
+			if st.Endpoint.IsValid() {
+				ep = st.Endpoint.String()
+			}
+			if !st.LastHandshake.IsZero() {
+				hs = time.Since(st.LastHandshake).Round(time.Second).String() + " ago"
+			}
 		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.Name, p.IP, path, ep, hs)
 	}
-	if out, err := wg.Show(*df.iface); err == nil {
-		fmt.Print("\n" + out)
-	}
-	return nil
+	return w.Flush()
 }

@@ -19,6 +19,8 @@ export interface Device {
   publicKey: string;
   ip: string;
   endpoint: string | null;
+  /** NAT traversal candidates the device reported: STUN-mapped and LAN addresses. */
+  candidates?: string[];
   hub: boolean;
   tokenHash: string;
   createdAt: number;
@@ -38,14 +40,15 @@ export interface SetupKey {
 export interface Peer {
   name: string;
   publicKey: string;
-  allowedIPs: string[];
-  endpoint?: string;
-  persistentKeepalive?: number;
+  ip: string;
+  hub: boolean;
+  /** Addresses to try, best first: static endpoint, then reported candidates. */
+  endpoints: string[];
 }
 
 const MAX_BODY = 8 * 1024;
 const LAST_SEEN_WRITE_MS = 5 * 60 * 1000;
-const KEEPALIVE = 25;
+const MAX_CANDIDATES = 8;
 const DEFAULT_KEY_TTL = 24 * 3600;
 const MAX_KEY_TTL = 365 * 24 * 3600;
 
@@ -296,9 +299,16 @@ class Api {
     const self = await this.requireDevice(req);
     const body = await readJson(req);
     const endpoint = optEndpoint(body.endpoint);
+    // Omitted candidates (status checks, one-off calls) keep the stored ones.
+    const candidates = body.candidates === undefined ? (self.candidates ?? []) : optCandidates(body.candidates);
     const t = this.now();
-    if (endpoint !== self.endpoint || t - self.lastSeen > LAST_SEEN_WRITE_MS) {
+    if (
+      endpoint !== self.endpoint ||
+      candidates.join() !== (self.candidates ?? []).join() ||
+      t - self.lastSeen > LAST_SEEN_WRITE_MS
+    ) {
       self.endpoint = endpoint;
+      self.candidates = candidates;
       // Losing the endpoint means peers can no longer dial it as a hub.
       if (!endpoint) self.hub = false;
       self.lastSeen = t;
@@ -310,32 +320,27 @@ class Api {
       self: publicDevice(self),
       network: { name: this.cfg.networkName, cidr: this.cidr.text },
       address: `${self.ip}/${this.cidr.bits}`,
-      peers: computePeers(self, devices, this.cidr.text),
+      peers: computePeers(self, devices),
     });
   }
 }
 
 /**
- * Decides which peers `self` should configure. Public devices are dialed
- * directly; two NATed devices cannot reach each other, so a NATed device
- * routes the whole network through the hub (oldest hub wins) and relies on
- * longest-prefix match for its direct /32 peers.
+ * Every other device is a peer. The client decides per peer whether traffic
+ * goes direct (after a successful hole punch) or via the hub.
  */
-export function computePeers(self: Device, devices: Device[], cidrText: string): Peer[] {
-  const selfPublic = self.endpoint !== null;
-  const hub = devices.find((d) => d.hub && d.endpoint !== null && d.id !== self.id);
-  const peers: Peer[] = [];
-  for (const d of devices) {
-    if (d.id === self.id) continue;
-    const peerPublic = d.endpoint !== null;
-    if (!selfPublic && !peerPublic) continue; // no path; traffic goes via the hub
-    const p: Peer = { name: d.name, publicKey: d.publicKey, allowedIPs: [`${d.ip}/32`] };
-    if (peerPublic) p.endpoint = d.endpoint!;
-    if (!selfPublic) p.persistentKeepalive = KEEPALIVE;
-    if (!selfPublic && hub && d.id === hub.id) p.allowedIPs = [cidrText];
-    peers.push(p);
-  }
-  return peers;
+export function computePeers(self: Device, devices: Device[]): Peer[] {
+  return devices
+    .filter((d) => d.id !== self.id)
+    .map((d) => ({
+      name: d.name,
+      publicKey: d.publicKey,
+      ip: d.ip,
+      hub: d.hub && d.endpoint !== null,
+      endpoints: [...(d.endpoint ? [d.endpoint] : []), ...(d.candidates ?? [])].filter(
+        (e, i, all) => all.indexOf(e) === i,
+      ),
+    }));
 }
 
 function publicDevice(d: Device) {
@@ -345,6 +350,7 @@ function publicDevice(d: Device) {
     publicKey: d.publicKey,
     ip: d.ip,
     endpoint: d.endpoint,
+    candidates: d.candidates ?? [],
     hub: d.hub,
     createdAt: new Date(d.createdAt).toISOString(),
     lastSeen: new Date(d.lastSeen).toISOString(),
@@ -417,6 +423,23 @@ function optInt(v: unknown, field: string, min: number, max: number): number | u
     throw new HttpError(400, `${field} must be an integer between ${min} and ${max}`);
   }
   return v;
+}
+
+/** Candidates must be literal IP:port (no DNS names), deduplicated, at most 8. */
+function optCandidates(v: unknown): string[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v) || v.length > MAX_CANDIDATES) {
+    throw new HttpError(400, `candidates must be an array of at most ${MAX_CANDIDATES} addresses`);
+  }
+  const out: string[] = [];
+  for (const c of v) {
+    const ep = optEndpoint(c);
+    if (!ep || !/^(\d{1,3}(\.\d{1,3}){3}|\[[0-9a-fA-F:.]+\]):\d+$/.test(ep)) {
+      throw new HttpError(400, "candidates must be IP:port");
+    }
+    if (!out.includes(ep)) out.push(ep);
+  }
+  return out;
 }
 
 /** Accepts "host:port" with an IPv4 address, "[IPv6]" or a DNS name. */

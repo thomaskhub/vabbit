@@ -1,5 +1,6 @@
-# Keeps an enrolled interface up. Enroll once with `sudo edgeguard up ...`
-# (Ctrl-C after "Applied config"), then: systemctl enable --now edgeguard@eg0
+# Runs the agent for an enrolled interface. Enroll once with
+# `sudo edgeguard up --dry-run --server ... --setup-key ...`, then:
+#   systemctl enable --now edgeguard@eg0
 [Unit]
 Description=EdgeGuard WireGuard agent (%i)
 After=network-online.target
@@ -14,7 +15,12 @@ CapabilityBoundingSet=CAP_NET_ADMIN
 AmbientCapabilities=CAP_NET_ADMIN
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/edgeguard /proc/sys/net/ipv4/conf -/run/wireguard
+ReadWritePaths=/var/lib/edgeguard /proc/sys/net/ipv4/conf
+# Control socket for `edgeguard status` / `wg show`.
+RuntimeDirectory=wireguard
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+DeviceAllow=/dev/net/tun rw
 StateDirectory=edgeguard
 StateDirectoryMode=0700
 ProtectHome=true

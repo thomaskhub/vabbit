@@ -45,3 +45,18 @@ jobs:
         with:
           name: edgeguard-linux
           path: client/dist/
+
+  e2e:
+    # Real WireGuard tunnels through emulated home NATs (network namespaces).
+    runs-on: ubuntu-latest
+    needs: [edge, client]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+      - run: cd edge && bun install --frozen-lockfile
+      - run: sudo env "PATH=$PATH" "HOME=$HOME" "GOPATH=$(go env GOPATH)" "GOCACHE=$(go env GOCACHE)" ./scripts/e2e-nat.sh

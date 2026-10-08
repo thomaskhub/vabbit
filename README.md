@@ -6,8 +6,10 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
 
 * The control plane (~400 lines of TypeScript) hands out IPs and peer lists. It never
   sees a WireGuard private key and never carries traffic.
-* The client is one static Go binary with zero third-party dependencies: an admin CLI
-  and a device agent. Linux today; macOS and Windows are next.
+* The client is one static Go binary: an admin CLI and a device agent with embedded
+  WireGuard. Linux today; macOS and Windows are next.
+* NAT traversal: devices punch through NATs with STUN and connect directly; when that
+  fails (symmetric NAT) traffic falls back to a relay "hub" automatically.
 * Tokens are 256-bit random values stored only as SHA-256 hashes.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
@@ -41,8 +43,9 @@ See [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
 ```sh
 edgeguard login --server https://mynet.b-cdn.net      # prompts for the ega_ token
 
-# A machine with a public IP that relays for devices behind NAT. Only the admin
-# can make a hub (it sees relayed traffic), so do this where you're logged in:
+# Optional but recommended: a machine with a public IP that relays when a direct
+# path can't be punched. Only the admin can make a hub (it sees relayed traffic),
+# so do this where you're logged in:
 sudo edgeguard up --endpoint 203.0.113.10:51820 --hub
 
 # Any other machine where you're not logged in as admin:
@@ -51,8 +54,9 @@ sudo EDGEGUARD_SETUP_KEY=egk_... edgeguard up --server https://mynet.b-cdn.net
 ```
 
 On a machine where you're logged in as admin, `sudo edgeguard up` mints its own
-one-time key. Devices need `wireguard-tools` and `iproute2`, plus the WireGuard
-kernel module (or `wireguard-go` on PATH as a fallback).
+one-time key. Devices need `iproute2` and `/dev/net/tun`; WireGuard itself is built in.
+Outbound UDP to STUN servers (default Cloudflare and Google, change with `--stun`) is
+used to discover the device's public address.
 
 To keep it running: `sudo cp packaging/edgeguard@.service /etc/systemd/system/ &&
 sudo systemctl enable --now edgeguard@eg0` after the first enrollment.
@@ -61,7 +65,7 @@ sudo systemctl enable --now edgeguard@eg0` after the first enrollment.
 
 ```sh
 edgeguard devices ls
-edgeguard devices rm <id>         # device is cut off on its next sync (≤30s)
+edgeguard devices rm <id>         # device is cut off on its next sync (≤15s)
 edgeguard devices set <id> --hub=true
 edgeguard keys ls / keys rm <id>
 sudo edgeguard status
@@ -70,16 +74,27 @@ sudo edgeguard leave              # a device removes itself
 
 ## Connectivity
 
-There is no NAT hole punching. Devices started with `--endpoint` are reachable
-directly; devices behind NAT reach those directly and reach each other through the
-hub. Without a hub, two NATed devices can't talk to each other.
+Devices behind NAT find their public address with STUN on the WireGuard port, share it
+through the edge script, and punch holes to each other, so most home and office
+networks connect directly. `sudo edgeguard status` shows each peer's path:
+
+```
+NAME   IP              PATH           ENDPOINT            HANDSHAKE
+hub    100.92.17.149   direct (hub)   203.0.113.10:51820  12s ago
+phone  100.92.125.112  direct         192.0.2.10:51820    10s ago
+tv     100.92.239.109  relay via hub  198.51.100.4:17577  never
+```
+
+When both sides are behind port-randomising (symmetric) NATs, punching can't work and
+traffic goes through the hub; the agent keeps trying and switches to direct when it can.
+Without a hub, such pairs can't connect. Details in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Development
 
 ```sh
 make test                                   # edge (bun test) + client (go test)
-sudo ./scripts/e2e-netns.sh                 # real tunnels between 3 network namespaces
+sudo ./scripts/e2e-nat.sh                   # real tunnels through emulated home NATs
 cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :8787, in memory
 edgeguard login --server http://127.0.0.1:8787 --token ega_...
-sudo edgeguard up --dry-run --once          # prints the WireGuard config instead of applying it
+sudo edgeguard up --dry-run                 # syncs once and prints the peers instead of starting
 ```

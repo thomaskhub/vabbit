@@ -120,12 +120,22 @@ describe("devices and sync", () => {
     const sa = await call("POST", "/api/v1/sync", { endpoint: "203.0.113.5:51820" }, a.deviceToken);
     expect(sa.status).toBe(200);
     expect(sa.body.address).toBe(`${a.device.ip}/24`);
-    expect(sa.body.peers).toEqual([{ name: "b", publicKey: KEY2, allowedIPs: [`${b.device.ip}/32`] }]);
+    expect(sa.body.peers).toEqual([{ name: "b", publicKey: KEY2, ip: b.device.ip, hub: false, endpoints: [] }]);
 
-    const sb = await call("POST", "/api/v1/sync", {}, b.deviceToken);
+    // b reports NAT traversal candidates; a sees them, a's static endpoint first.
+    const cands = ["198.51.100.9:40001", "192.168.1.20:51820"];
+    const sb = await call("POST", "/api/v1/sync", { candidates: cands }, b.deviceToken);
     expect(sb.body.peers).toEqual([
-      { name: "a", publicKey: KEY1, allowedIPs: [`${a.device.ip}/32`], endpoint: "203.0.113.5:51820", persistentKeepalive: 25 },
+      { name: "a", publicKey: KEY1, ip: a.device.ip, hub: false, endpoints: ["203.0.113.5:51820"] },
     ]);
+    const sa2 = await call("POST", "/api/v1/sync", { endpoint: "203.0.113.5:51820", candidates: ["203.0.113.5:51820", "10.0.0.2:51820"] }, a.deviceToken);
+    expect(sa2.body.peers[0].endpoints).toEqual(cands);
+    const sb2 = await call("POST", "/api/v1/sync", { candidates: cands }, b.deviceToken);
+    expect(sb2.body.peers[0].endpoints).toEqual(["203.0.113.5:51820", "10.0.0.2:51820"]);
+    // A sync without candidates (e.g. `edgeguard status`) keeps the stored ones.
+    await call("POST", "/api/v1/sync", {}, b.deviceToken);
+    const sa3 = await call("POST", "/api/v1/sync", { endpoint: "203.0.113.5:51820" }, a.deviceToken);
+    expect(sa3.body.peers[0].endpoints).toEqual(cands);
 
     expect((await call("DELETE", `/api/v1/devices/${b.device.id}`, undefined, ADMIN)).status).toBe(200);
     expect((await call("POST", "/api/v1/sync", {}, b.deviceToken)).status).toBe(401);
@@ -138,6 +148,14 @@ describe("devices and sync", () => {
     expect((await call("DELETE", "/api/v1/device", undefined, a.deviceToken)).status).toBe(200);
     expect((await call("POST", "/api/v1/sync", {}, a.deviceToken)).status).toBe(401);
     expect((await call("GET", "/api/v1/devices", undefined, ADMIN)).body.devices).toEqual([]);
+  });
+
+  test("rejects bad candidates", async () => {
+    const { call } = await setup();
+    const a = await enroll(call, "a", KEY1);
+    for (const candidates of [["host.example:1"], "1.2.3.4:5", Array(9).fill("1.2.3.4:5"), ["1.2.3.4"]]) {
+      expect((await call("POST", "/api/v1/sync", { candidates }, a.deviceToken)).status).toBe(400);
+    }
   });
 
   test("forged device token is rejected", async () => {
@@ -173,27 +191,16 @@ describe("devices and sync", () => {
 });
 
 describe("computePeers", () => {
-  const dev = (id: string, endpoint: string | null, hub = false): Device => ({
-    id, name: id, publicKey: id, ip: `100.92.0.${id.charCodeAt(0) - 96}`, endpoint, hub,
-    tokenHash: "", createdAt: 0, lastSeen: 0,
-  });
-
-  test("NATed devices route the network via the hub and skip each other", () => {
-    const hub = dev("h", "198.51.100.1:51820", true);
-    const pub = dev("p", "198.51.100.2:51820");
-    const n1 = dev("a", null);
-    const n2 = dev("b", null);
-    const all = [hub, pub, n1, n2];
-    const peers = computePeers(n1, all, "100.92.0.0/24");
-    expect(peers.map((p) => [p.name, p.allowedIPs])).toEqual([
-      ["h", ["100.92.0.0/24"]],
-      ["p", [`${pub.ip}/32`]],
+  test("lists everyone else; hub flag needs an endpoint", () => {
+    const dev = (id: string, endpoint: string | null, hub = false): Device => ({
+      id, name: id, publicKey: id, ip: id, endpoint, hub, candidates: ["1.1.1.1:1"],
+      tokenHash: "", createdAt: 0, lastSeen: 0,
+    });
+    const peers = computePeers(dev("a", null), [dev("a", null), dev("h", "9.9.9.9:1", true), dev("x", null, true)]);
+    expect(peers.map((p) => [p.name, p.hub, p.endpoints])).toEqual([
+      ["h", true, ["9.9.9.9:1", "1.1.1.1:1"]],
+      ["x", false, ["1.1.1.1:1"]],
     ]);
-    expect(peers.every((p) => p.persistentKeepalive === 25)).toBe(true);
-    // The hub knows everyone as a /32 and dials nobody without an endpoint.
-    const hp = computePeers(hub, all, "100.92.0.0/24");
-    expect(hp.map((p) => p.allowedIPs[0])).toEqual([`${pub.ip}/32`, `${n1.ip}/32`, `${n2.ip}/32`]);
-    expect(hp.find((p) => p.name === "a")!.endpoint).toBeUndefined();
   });
 });
 
