@@ -68,7 +68,16 @@ jobs:
           go-version-file: client/go.mod
       - name: Unit tests
         shell: bash
-        run: cd client && go vet ./... && go test ./...
+        run: |
+          cd client && go vet ./...
+          # Failures as annotations: job logs are not readable from every place this repo is worked on.
+          if ! go test ./... > ../test.log 2>&1; then
+            cat ../test.log
+            grep -E -B2 -A12 -- '--- FAIL|^FAIL|panic:' ../test.log | head -60 | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}' | sed 's/^/::error title=windows unit tests::/'
+            echo
+            exit 1
+          fi
+          cat ../test.log
       - name: Build and collect the release files
         shell: bash
         run: |

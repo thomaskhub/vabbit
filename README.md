@@ -9,7 +9,7 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
 * The control plane (~400 lines of TypeScript) hands out IPs and peer lists. It never
   sees a WireGuard private key and never carries traffic.
 * The client is one static Go binary: an admin CLI and a device agent with embedded
-  WireGuard. Linux today; macOS and Windows are next.
+  WireGuard. Devices run Linux or Windows; the admin commands also run on macOS.
 * NAT traversal: devices punch through NATs with STUN and connect directly; when that
   fails (symmetric NAT) traffic falls back to a relay "hub" automatically.
 * Works on hotel and guest Wi-Fi that blocks UDP: the device tunnels to the hub over
@@ -185,6 +185,23 @@ sudo cp packaging/vabbit@.service /etc/systemd/system/
 sudo systemctl enable --now vabbit@vb0                                               # keep it running
 ```
 
+**Windows** (10/11 or Server, amd64 or arm64): in PowerShell **as Administrator**:
+
+```powershell
+$env:VABBIT_SERVER = 'https://mynet.b-cdn.net'; $env:VABBIT_SETUP_KEY = 'vbk_...'
+irm https://raw.githubusercontent.com/thomaskhub/vabbit/main/scripts/install.ps1 | iex
+vabbit status
+```
+
+This installs `vabbit.exe` and the Wintun driver (`wintun.dll`) into `C:\Program Files\Vabbit`, adds it to
+`PATH`, enrolls, and runs the device as the Windows service `vabbit-vb0` (starts at boot). The same settings as
+above apply (`$env:VABBIT_VERSION`, `$env:GITHUB_TOKEN` while the repository is private). By hand:
+`vabbit up --server URL --dry-run` to enroll, then `vabbit service install` (and `vabbit service uninstall`).
+`vabbit down` stops the service, `vabbit leave` also removes it. The agent adds two Windows Firewall rules, for
+WireGuard's UDP port and for ping from inside the VPN; anything else that should be reachable from other devices
+(e.g. Remote Desktop) needs its own firewall rule. State and the log live in `C:\ProgramData\vabbit`, readable
+only by SYSTEM and Administrators. A Windows device can't be a hub.
+
 `vabbit up` without `--dry-run` enrolls and runs the tunnel in the foreground instead.
 Devices need `iproute2` and `/dev/net/tun`; WireGuard itself is built in. Outbound UDP to
 STUN servers (default Cloudflare and Google) is used to discover the public address. Devices
@@ -206,6 +223,7 @@ host names (letters, digits and hyphens) are skipped and logged. The packaged se
 | `vabbit status` | Show this device, its peers and how each is reached. |
 | `vabbit down` | Stop the tunnel; the device stays enrolled. |
 | `vabbit leave` | Remove this device from the network and delete its local state. |
+| `vabbit service install\|uninstall` | Windows: run this device as a service (`--iface`, default `vb0`). |
 | `vabbit version` | Print the version. |
 
 **`vabbit up`**

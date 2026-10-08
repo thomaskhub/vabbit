@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -230,6 +231,9 @@ func replaceFile(path string, fi os.FileInfo, data []byte) error {
 // canNotReplace reports whether err means that path cannot be replaced by a rename (bind mount,
 // read-only or sandboxed directory, an owner we may not set) but may still be written in place.
 func canNotReplace(err error) bool {
+	if errors.Is(err, fs.ErrPermission) { // also Windows, where an open file can't be renamed over
+		return true
+	}
 	for _, e := range []error{syscall.EBUSY, syscall.EXDEV, syscall.EROFS, syscall.EPERM, syscall.EACCES} {
 		if errors.Is(err, e) {
 			return true

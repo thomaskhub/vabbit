@@ -171,6 +171,6 @@ write fail (logged once) instead of guessing which lines are ours.
 
 ## Not in v1
 
-macOS and Windows clients (the WireGuard part is already portable; address
-and route setup is Linux-only), IPv6 candidates, ACLs between devices, a DNS server (names are
+macOS devices (Linux and Windows devices are supported; the admin commands run on macOS), Windows
+or macOS hubs, IPv6 VPN addresses, ACLs between devices, a DNS server (names are
 written to `/etc/hosts` instead).
