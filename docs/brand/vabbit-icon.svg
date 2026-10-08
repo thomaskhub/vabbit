@@ -1,41 +1,64 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Vabbit">
-<defs>
-    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#0d9488"/>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0f2a4d"/><stop offset="1" stop-color="#071426"/></linearGradient></defs>
+<rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<svg x="56" y="78" width="400" height="357.4" viewBox="20 20 940 840">
+  <defs>
+    <linearGradient id="teal" gradientUnits="userSpaceOnUse" x1="300" y1="250" x2="800" y2="800">
+      <stop offset="0" stop-color="#3fdca0"/><stop offset="1" stop-color="#14a38c"/>
     </linearGradient>
-    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#14b8a6"/>
+    <linearGradient id="ear" x1="0" y1="0" x2="1" y2="0.6">
+      <stop offset="0" stop-color="#43dfa2"/><stop offset="1" stop-color="#22b49c"/>
+    </linearGradient>
+    <linearGradient id="earDark" x1="0" y1="0" x2="1" y2="0.6">
+      <stop offset="0" stop-color="#1fae8c"/><stop offset="1" stop-color="#138a87"/>
+    </linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#3fdca0"/><stop offset="1" stop-color="#19a990"/>
+    </linearGradient>
+    <linearGradient id="chest" gradientUnits="userSpaceOnUse" x1="0" y1="450" x2="0" y2="700">
+      <stop offset="0" stop-color="#1d6fe0" stop-opacity="0"/><stop offset="0.5" stop-color="#1d6fe0" stop-opacity="0.7"/><stop offset="1" stop-color="#2563eb"/>
     </linearGradient>
     <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#3b82f6"/>
+      <stop offset="0" stop-color="#1e5fd6"/><stop offset="1" stop-color="#3b82f6"/>
     </linearGradient>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <radialGradient id="knob" cx="0.4" cy="0.4" r="0.7">
+      <stop offset="0" stop-color="#e0f7ff"/><stop offset="0.6" stop-color="#7dd3fc"/><stop offset="1" stop-color="#38bdf8"/>
+    </radialGradient>
+    <filter id="glow" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0f2a4d"/><stop offset="1" stop-color="#071426"/></linearGradient></defs>
-<rect width="512" height="512" rx="112" fill="url(#bg)"/>
-<g transform="translate(76 96) scale(1.2)">
-  <!-- ears -->
-  <path d="M76 0 C 130 22, 200 62, 264 108 L 236 126 C 190 84, 130 40, 76 0 Z" fill="#34d399"/>
-  <path d="M70 30 C 120 46, 180 84, 236 118 L 212 132 C 170 96, 120 60, 70 30 Z" fill="#0f9f8a"/>
-  <!-- circuit trace -->
-  <path d="M90 132 L90 98 L136 86" fill="none" stroke="#2dd4bf" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="136" cy="86" r="5" fill="#2dd4bf"/>
-  <!-- tail -->
-  <circle cx="62" cy="150" r="17" fill="#14b8a6"/>
-  <!-- hind leg -->
-  <path d="M96 150 C 62 182, 40 230, 0 266 L 32 266 C 72 236, 104 214, 130 200 Z" fill="#10b981"/>
-  <!-- body -->
-  <path d="M236 122 C 196 96, 120 100, 84 136 C 62 158, 58 196, 72 214 C 100 224, 150 222, 196 206 C 226 194, 244 168, 248 146 Z" fill="url(#g1)"/>
-  <!-- head -->
-  <path d="M206 104 C 232 90, 262 100, 302 138 L 296 150 C 272 158, 244 162, 220 154 C 208 140, 204 120, 206 104 Z" fill="url(#g2)"/>
-  <path d="M250 118 L 272 124 L 254 128 Z" fill="#0b1f3a"/>
-  <!-- front leg -->
-  <path d="M228 176 C 260 186, 284 212, 300 240 L 284 246 C 268 222, 250 204, 222 192 Z" fill="url(#blue)"/>
-  <!-- shield -->
-  <path d="M104 172 Q 168 150 236 162 L232 214 Q 218 248 180 266 Q 140 246 118 214 Z" fill="none" stroke="url(#blue)" stroke-width="9" stroke-linejoin="round"/>
-  <!-- toggle -->
-  <rect x="120" y="152" width="80" height="40" rx="20" fill="#0b1f3a" stroke="#38bdf8" stroke-width="5" filter="url(#glow)"/>
-  <circle cx="178" cy="172" r="12" fill="#7dd3fc" filter="url(#glow)"/>
-</g>
+    <path id="bodyShape" d="M650 306 C 540 326, 400 348, 318 405 C 262 445, 242 510, 256 580 C 270 640, 320 698, 380 720 L 470 704 C 560 692, 650 652, 722 600 C 762 570, 762 540, 746 520 L 640 520 Z"/>
+    <path id="headShape" d="M640 300 C 700 284, 770 288, 802 300 C 852 330, 902 390, 936 446 C 912 470, 880 490, 846 500 C 780 512, 700 516, 640 520 C 608 470, 608 350, 640 300 Z"/>
+    <clipPath id="bodyClip"><use href="#bodyShape"/><use href="#headShape"/></clipPath>
+  </defs>
+  <g id="rabbit" stroke-linejoin="round">
+    <!-- shield (behind the body) -->
+    <path d="M372 722 C 420 790, 462 822, 512 844 C 602 802, 692 722, 748 556" fill="none" stroke="url(#blue)" stroke-width="24"/>
+    <!-- circuit trace -->
+    <path d="M268 450 L268 322 L432 290" fill="none" stroke="#2fc79a" stroke-width="22"/>
+    <!-- tail -->
+    <circle cx="205" cy="486" r="46" fill="#1aa38a"/>
+    <!-- hind leg -->
+    <path d="M272 556 C 240 610, 200 650, 150 670 C 118 722, 80 782, 46 824 L 152 812 C 192 760, 252 722, 332 702 Z" fill="url(#teal)" stroke="#0b1f3a" stroke-width="8" paint-order="stroke"/>
+    <!-- body -->
+    <use href="#bodyShape" fill="url(#teal)" stroke="#0b1f3a" stroke-width="8" paint-order="stroke"/>
+    <!-- ears -->
+    <path d="M256 104 L 296 120 C 430 175, 570 245, 712 318 L 668 344 C 540 280, 410 215, 286 172 Z" fill="url(#earDark)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
+    <path d="M256 104 L 296 120 C 430 175, 570 245, 712 318 L 698 327 C 560 258, 420 190, 272 140 Z" fill="url(#ear)"/>
+    <path d="M352 34 L 384 62 C 520 140, 660 214, 794 292 L 750 318 C 622 240, 500 170, 368 112 Z" fill="url(#ear)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
+    <!-- head -->
+    <use href="#headShape" fill="url(#teal)"/>
+    <path d="M770 386 C 792 390, 818 400, 840 416 C 814 420, 790 412, 770 386 Z" fill="#0b1f3a"/>
+    <g clip-path="url(#bodyClip)">
+      <path d="M580 380 L 960 380 L 960 760 L 430 720 Z" fill="url(#chest)"/>
+      <path d="M292 428 C 248 510, 256 620, 340 712 L 376 708 C 304 626, 296 530, 330 440 Z" fill="#4be3a8" opacity="0.55"/>
+      <path d="M330 440 C 296 530, 304 626, 376 708" fill="none" stroke="#0b1f3a" stroke-width="6" opacity="0.8"/>
+    </g>
+    <!-- front legs -->
+    <path d="M712 640 C 790 650, 850 700, 880 766 L 842 762 C 810 722, 770 696, 712 682 Z" fill="url(#blue)"/>
+    <!-- toggle -->
+    <rect x="400" y="500" width="216" height="110" rx="55" fill="#0f2547" stroke="#38bdf8" stroke-width="14" filter="url(#glow)"/>
+    <circle cx="560" cy="555" r="40" fill="url(#knob)" filter="url(#glow)"/>
+  </g>
+</svg>
 </svg>
