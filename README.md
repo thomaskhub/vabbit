@@ -42,8 +42,22 @@ make deploy && export BUNNY_API_KEY=...          # Bunny: Account settings > API
 ./dist/vabbit-deploy apply --admin-token-file admin-tokens.txt
 ```
 
-`apply` prints each network's URL and, on first deploy, its admin token. Hand both to
-the admin; with `--admin-token-file` the admin can log in straight from that file.
+**Where the admin token comes from.** Bunny only ever stores the token's hash, so the
+token itself exists in exactly one place: what `apply` hands you the first time it creates
+a network (later runs keep the existing token and print nothing).
+
+* `apply` always prints it once on screen.
+* `--admin-token-file admin-tokens.txt` also appends it to that file, which `apply`
+  creates for you (mode 0600). Each line is `NETWORK URL TOKEN`:
+  ```
+  home https://vabbit-home.b-cdn.net vba_3kX…
+  ```
+  `rotate-admin --admin-token-file …` appends the replacement token the same way.
+
+Give the token (or the file) to the admin over a secure channel, then delete your copy.
+The admin logs in with `vabbit login --token-file admin-tokens.txt`, or pastes the token
+into `vabbit login --server URL`. A lost token can't be recovered; make a new one with
+`vabbit-deploy rotate-admin -n NAME`.
 
 | Command | What it does |
 |---|---|
@@ -98,7 +112,7 @@ The admin logs in once per machine; the login is stored in `~/.config/vabbit/adm
 
 ```sh
 vabbit login --server https://mynet.b-cdn.net            # prompts for the vba_ token
-vabbit login --token-file admin-tokens.txt               # or read it from vabbit-deploy's file
+vabbit login --token-file admin-tokens.txt               # or from the file vabbit-deploy apply wrote
 
 vabbit keys create                     # one-time setup key for a new device (valid 24h)
 vabbit keys create --reusable --ttl 7d --device-ttl 30d  # e.g. for a fleet of short-lived VMs
