@@ -80,12 +80,7 @@ func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map
 		key := peer.PublicKey
 		live[key] = true
 		st := p.peers[key]
-		cands := p.order(peer.Candidates)
-		if peer.Hub && len(cands) > 1 {
-			// A hub is public by definition: dial its static endpoint only (its
-			// other candidates are typically a cloud VM's private address).
-			cands = cands[:1]
-		}
+		cands := p.dialList(peer)
 		if st == nil || !slices.Equal(st.cands, cands) {
 			st = &peerState{cands: cands}
 			p.peers[key] = st
@@ -135,6 +130,26 @@ func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map
 		}
 	}
 	return cfgs, paths
+}
+
+// dialList is the candidates Plan punches towards for peer, in order.
+func (p *Planner) dialList(peer ResolvedPeer) []netip.AddrPort {
+	cands := p.order(peer.Candidates)
+	if peer.Hub && len(cands) > 1 {
+		// A hub is public by definition: dial its static endpoint only (its
+		// other candidates are typically a cloud VM's private address).
+		cands = cands[:1]
+	}
+	return cands
+}
+
+// HubTarget is the address Plan dials for a hub, which the TCP relay must intercept. It is invalid
+// when the hub has no candidates.
+func (p *Planner) HubTarget(hub ResolvedPeer) netip.AddrPort {
+	if c := p.dialList(hub); len(c) > 0 {
+		return c[0]
+	}
+	return netip.AddrPort{}
 }
 
 // order drops candidates of a family this host cannot use, puts private (LAN) candidates first when

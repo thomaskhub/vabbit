@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -126,6 +127,59 @@ func summariseMapped(mapped []netip.AddrPort, isLocal func(netip.Addr) bool) (ca
 		nat = "easy"
 	}
 	return cands, public, nat
+}
+
+// stunQuery asks one STUN server for our mapped address.
+type stunQuery func(ctx context.Context, server netip.AddrPort) (netip.AddrPort, error)
+
+// queryMapped asks every server, over each family this host has (see filterFamilies), for our mapped
+// address. All lookups and queries run at once, so a dead family or server costs one timeout, not one
+// per query. The answers keep the servers' order, IPv4 before IPv6 within a server.
+func queryMapped(ctx context.Context, servers []string, haveV4, haveV6 bool, lookup lookupFunc, query stunQuery) []netip.AddrPort {
+	results := make([][2]netip.AddrPort, len(servers))
+	var all sync.WaitGroup
+	for i, s := range servers {
+		all.Add(1)
+		go func() {
+			defer all.Done()
+			addrs, err := resolveEndpoint(ctx, s, lookup)
+			if err != nil {
+				return
+			}
+			var inner sync.WaitGroup
+			for j, addr := range firstPerFamily(filterFamilies(addrs, haveV4, haveV6)) {
+				inner.Add(1)
+				go func() {
+					defer inner.Done()
+					if ap, err := query(ctx, addr); err == nil { // an error is e.g. no route for that family
+						results[i][j] = ap
+					}
+				}()
+			}
+			inner.Wait()
+		}()
+	}
+	all.Wait()
+	var mapped []netip.AddrPort
+	for _, r := range results {
+		for _, ap := range r {
+			if ap.IsValid() {
+				mapped = append(mapped, ap)
+			}
+		}
+	}
+	return mapped
+}
+
+// udpWorksTo reports whether STUN got an answer over the family of target, the address we use for the
+// hub. With no target, an answer over either family counts.
+func udpWorksTo(target netip.AddrPort, stunCands []netip.AddrPort) bool {
+	for _, c := range stunCands {
+		if !target.IsValid() || c.Addr().Unmap().Is4() == target.Addr().Unmap().Is4() {
+			return true
+		}
+	}
+	return false
 }
 
 // firstPerFamily returns the first IPv4 and the first IPv6 address of the list (IPv4 first).

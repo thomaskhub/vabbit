@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"slices"
 	"testing"
+	"time"
 )
 
 func addrs(ss ...string) []netip.Addr {
@@ -213,5 +214,89 @@ func TestPlannerOrderFamilies(t *testing.T) {
 	q.HaveV4 = true
 	if got := q.order(c); !slices.Equal(got, aps("203.0.113.7:51820")) {
 		t.Errorf("IPv4-only host must drop IPv6 candidates, got %v", got)
+	}
+}
+
+func TestHubTargetMatchesPlan(t *testing.T) {
+	hub := ResolvedPeer{Peer: Peer{Name: "hub", PublicKey: kHub, IP: ipHub, Hub: true},
+		Candidates: aps("203.0.113.7:51820", "[2001:db8::5]:51820")}
+	p := NewPlanner()
+	p.HaveV6 = true // IPv6-only host: the planner skips the hub's first (IPv4) address
+	want := netip.MustParseAddrPort("[2001:db8::5]:51820")
+	if got := p.HubTarget(hub); got != want {
+		t.Fatalf("HubTarget = %v, want %v", got, want)
+	}
+	cfgs, _ := p.Plan(time.Now(), Network{CIDR: cidr}, []ResolvedPeer{hub}, nil, kHub)
+	if len(cfgs) != 1 || cfgs[0].Endpoint != want {
+		t.Errorf("Plan dials %v, HubTarget says %v", cfgs, want)
+	}
+	if got := p.HubTarget(ResolvedPeer{}); got.IsValid() {
+		t.Errorf("HubTarget without candidates = %v, want invalid", got)
+	}
+}
+
+func TestQueryMappedParallelAndOrdered(t *testing.T) {
+	dns := func(_ context.Context, host string) ([]netip.Addr, error) {
+		switch host {
+		case "a.example":
+			return addrs("192.0.2.1", "2001:db8::1"), nil
+		case "b.example":
+			return addrs("192.0.2.2", "2001:db8::2"), nil
+		}
+		return nil, errors.New("no such host")
+	}
+	answer := map[string]string{
+		"192.0.2.1:3478": "198.51.100.1:1000", "[2001:db8::1]:3478": "[2001:db8:f::1]:1000",
+		"192.0.2.2:3478": "198.51.100.1:2000", "[2001:db8::2]:3478": "[2001:db8:f::1]:2000",
+	}
+	query := func(ctx context.Context, s netip.AddrPort) (netip.AddrPort, error) {
+		// The first server answers last, and IPv6 on the second server is blackholed.
+		delay := 10 * time.Millisecond
+		if s.Addr() == netip.MustParseAddr("192.0.2.1") {
+			delay = 250 * time.Millisecond
+		}
+		if s.Addr() == netip.MustParseAddr("2001:db8::2") {
+			delay = time.Hour
+		}
+		ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+		defer cancel()
+		select {
+		case <-time.After(delay):
+			return netip.MustParseAddrPort(answer[s.String()]), nil
+		case <-ctx.Done():
+			return netip.AddrPort{}, errors.New("STUN timeout")
+		}
+	}
+	start := time.Now()
+	got := queryMapped(context.Background(), []string{"a.example:3478", "missing.example:3478", "b.example:3478"}, true, true, dns, query)
+	if d := time.Since(start); d > 450*time.Millisecond {
+		t.Errorf("queries took %v; they must run at once", d)
+	}
+	want := aps("198.51.100.1:1000", "[2001:db8:f::1]:1000", "198.51.100.1:2000")
+	if !slices.Equal(got, want) {
+		t.Errorf("queryMapped = %v, want %v", got, want)
+	}
+	if got := queryMapped(context.Background(), []string{"a.example:3478"}, true, false, dns, query); !slices.Equal(got, aps("198.51.100.1:1000")) {
+		t.Errorf("IPv4-only host must only ask over IPv4, got %v", got)
+	}
+}
+
+func TestUDPWorksTo(t *testing.T) {
+	v4, v6 := netip.MustParseAddrPort("203.0.113.7:51820"), netip.MustParseAddrPort("[2001:db8::5]:51820")
+	only6 := aps("[2001:db8:f::1]:1000")
+	for _, tc := range []struct {
+		target netip.AddrPort
+		stun   []netip.AddrPort
+		want   bool
+	}{
+		{v4, only6, false}, // IPv6 STUN says nothing about UDP to an IPv4 hub
+		{v6, only6, true},
+		{netip.AddrPort{}, only6, true},
+		{netip.AddrPort{}, nil, false},
+		{v4, aps("198.51.100.1:1000", "[2001:db8:f::1]:1000"), true},
+	} {
+		if got := udpWorksTo(tc.target, tc.stun); got != tc.want {
+			t.Errorf("udpWorksTo(%v, %v) = %v, want %v", tc.target, tc.stun, got, tc.want)
+		}
 	}
 }
