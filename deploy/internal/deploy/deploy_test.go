@@ -167,18 +167,24 @@ func TestApplyCreatesEverythingThenIsIdempotent(t *testing.T) {
 	f, c := newFake(t)
 	n := network(t)
 	var out bytes.Buffer
-	res, err := Apply(ctx, c, n, "code-v1", Options{Out: &out})
+	if has, err := HasAdminToken(ctx, c, n); err != nil || has {
+		t.Fatalf("fresh network has an admin token: %v", err)
+	}
+	res, err := Apply(ctx, c, n, "code-v1", sha("vba_one"), Options{Out: &out})
 	if err != nil {
 		t.Fatal(err, out.String())
 	}
-	if res.URL != "https://vabbit-home.b-cdn.net" || !strings.HasPrefix(res.AdminToken, "vba_") {
+	if res.URL != "https://vabbit-home.b-cdn.net" {
 		t.Fatalf("result %+v", res)
+	}
+	if has, err := HasAdminToken(ctx, c, n); err != nil || !has {
+		t.Fatalf("admin token not detected: %v", err)
 	}
 	s := f.script("vabbit-home")
 	if s.live != "code-v1" || f.publishN != 1 {
 		t.Fatalf("not published: live=%q publishes=%d", s.live, f.publishN)
 	}
-	if s.secrets["ADMIN_TOKEN_SHA256"] != sha(res.AdminToken) || s.secrets["STORAGE_ACCESS_KEY"] != "zone-pw-vabbit-home-state" {
+	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("vba_one") || s.secrets["STORAGE_ACCESS_KEY"] != "zone-pw-vabbit-home-state" {
 		t.Fatalf("secrets %v", s.secrets)
 	}
 	for k, v := range map[string]string{"NETWORK_NAME": "home", "NETWORK_CIDR": "100.92.0.0/16", "STORAGE_ZONE": "vabbit-home-state", "STORAGE_HOST": "storage.bunnycdn.com"} {
@@ -186,31 +192,43 @@ func TestApplyCreatesEverythingThenIsIdempotent(t *testing.T) {
 			t.Fatalf("var %s=%q want %q", k, s.vars[k], v)
 		}
 	}
-	if strings.Contains(out.String(), res.AdminToken) || strings.Contains(out.String(), "zone-pw") {
+	if strings.Contains(out.String(), sha("vba_one")) || strings.Contains(out.String(), "zone-pw") {
 		t.Fatalf("secret printed in step log:\n%s", out.String())
 	}
 
 	writes := f.writes
 	out.Reset()
-	res, err = Apply(ctx, c, n, "code-v1", Options{Out: &out})
-	if err != nil || res.Changed || res.AdminToken != "" || f.writes != writes {
+	res, err = Apply(ctx, c, n, "code-v1", sha("vba_one"), Options{Out: &out})
+	if err != nil || res.Changed || f.writes != writes {
 		t.Fatalf("second apply changed things: %+v %v writes %d->%d\n%s", res, err, writes, f.writes, out.String())
 	}
 
 	// New code is uploaded and published; the admin token stays.
 	hash := s.secrets["ADMIN_TOKEN_SHA256"]
-	if res, err = Apply(ctx, c, n, "code-v2", Options{Out: &out}); err != nil || !res.Changed {
+	if res, err = Apply(ctx, c, n, "code-v2", sha("vba_one"), Options{Out: &out}); err != nil || !res.Changed {
 		t.Fatal(err)
 	}
 	if s.live != "code-v2" || s.secrets["ADMIN_TOKEN_SHA256"] != hash {
 		t.Fatalf("code update: live=%q", s.live)
+	}
+
+	// A new token (rotation) replaces the secret and publishes.
+	publishes := f.publishN
+	if res, err = Apply(ctx, c, n, "code-v2", sha("vba_two"), Options{Out: &out}); err != nil || !res.Changed {
+		t.Fatal(err)
+	}
+	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("vba_two") || f.publishN != publishes+1 {
+		t.Fatal("rotation not published")
+	}
+	if _, err := Apply(ctx, c, n, "code-v2", "", Options{Out: &out}); err == nil {
+		t.Fatal("apply without an admin token must fail")
 	}
 }
 
 func TestPlanWritesNothing(t *testing.T) {
 	f, c := newFake(t)
 	var out bytes.Buffer
-	res, err := Apply(context.Background(), c, network(t), "code", Options{DryRun: true, Out: &out})
+	res, err := Apply(context.Background(), c, network(t), "code", "", Options{DryRun: true, Out: &out})
 	if err != nil || f.writes != 0 || !res.Changed {
 		t.Fatalf("plan: %v writes=%d", err, f.writes)
 	}
@@ -224,14 +242,14 @@ func TestCIDRChangeRefused(t *testing.T) {
 	_, c := newFake(t)
 	n := network(t)
 	var out bytes.Buffer
-	if _, err := Apply(ctx, c, n, "code", Options{Out: &out}); err != nil {
+	if _, err := Apply(ctx, c, n, "code", sha("vba_one"), Options{Out: &out}); err != nil {
 		t.Fatal(err)
 	}
 	n.CIDR = "100.93.0.0/16"
-	if _, err := Apply(ctx, c, n, "code", Options{Out: &out}); err == nil || !strings.Contains(err.Error(), "cut off every device") {
+	if _, err := Apply(ctx, c, n, "code", sha("vba_one"), Options{Out: &out}); err == nil || !strings.Contains(err.Error(), "cut off every device") {
 		t.Fatalf("want refusal, got %v", err)
 	}
-	if _, err := Apply(ctx, c, n, "code", Options{Out: &out, AllowCIDRChange: true}); err != nil {
+	if _, err := Apply(ctx, c, n, "code", sha("vba_one"), Options{Out: &out, AllowCIDRChange: true}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -241,44 +259,8 @@ func TestPublicStorageZoneRefused(t *testing.T) {
 	f, c := newFake(t)
 	n := network(t)
 	f.zones[1] = map[string]any{"Id": 1, "Name": n.StorageZone, "Region": "DE", "Password": "pw", "PullZones": []map[string]any{{"Id": 9, "Name": "oops"}}}
-	if _, err := Apply(ctx, c, n, "code", Options{Out: &bytes.Buffer{}}); err == nil || !strings.Contains(err.Error(), "public") {
+	if _, err := Apply(ctx, c, n, "code", sha("vba_one"), Options{Out: &bytes.Buffer{}}); err == nil || !strings.Contains(err.Error(), "public") {
 		t.Fatalf("want refusal, got %v", err)
-	}
-}
-
-func TestPinnedHashAndRotation(t *testing.T) {
-	ctx := context.Background()
-	f, c := newFake(t)
-	n := network(t)
-	n.AdminTokenSHA256 = sha("vba_one")
-	res, err := Apply(ctx, c, n, "code", Options{Out: &bytes.Buffer{}})
-	if err != nil || res.AdminToken != "" {
-		t.Fatalf("%v %+v", err, res)
-	}
-	s := f.script(n.ScriptName)
-	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("vba_one") {
-		t.Fatal("pinned hash not set")
-	}
-	// Changing the pinned hash in the config rotates the token.
-	n.AdminTokenSHA256 = sha("vba_two")
-	if res, err = Apply(ctx, c, n, "code", Options{Out: &bytes.Buffer{}}); err != nil || !res.Changed {
-		t.Fatal(err)
-	}
-	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("vba_two") {
-		t.Fatal("pinned hash not updated")
-	}
-	if _, _, err := RotateAdmin(ctx, c, n); err == nil {
-		t.Fatal("rotate-admin must refuse a pinned hash")
-	}
-
-	n.AdminTokenSHA256 = ""
-	tok, url, err := RotateAdmin(ctx, c, n)
-	if err != nil || url != "https://vabbit-home.b-cdn.net" || s.secrets["ADMIN_TOKEN_SHA256"] != sha(tok) || s.live != "code" {
-		t.Fatalf("rotate: %v", err)
-	}
-	// A later apply keeps the rotated token.
-	if res, err = Apply(ctx, c, n, "code", Options{Out: &bytes.Buffer{}}); err != nil || res.Changed || s.secrets["ADMIN_TOKEN_SHA256"] != sha(tok) {
-		t.Fatalf("apply after rotate: %v %+v", err, res)
 	}
 }
 
@@ -286,7 +268,7 @@ func TestDestroy(t *testing.T) {
 	ctx := context.Background()
 	f, c := newFake(t)
 	n := network(t)
-	if _, err := Apply(ctx, c, n, "code", Options{Out: &bytes.Buffer{}}); err != nil {
+	if _, err := Apply(ctx, c, n, "code", sha("vba_one"), Options{Out: &bytes.Buffer{}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := Destroy(ctx, c, n, &bytes.Buffer{}); err != nil {

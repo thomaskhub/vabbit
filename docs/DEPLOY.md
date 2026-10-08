@@ -9,8 +9,17 @@ publishes it. Run it again whenever you like; it only changes what differs.
 ```console
 $ make deploy                         # builds dist/vabbit-deploy with the edge script inside
 $ export BUNNY_API_KEY=...            # bunny.net > Account settings > API key
-$ vabbit-deploy init               # writes vabbit.toml
+$ vabbit-deploy init                  # writes vabbit.toml and your encrypted admin login
+New master password: ***********
+Repeat master password: ***********
+Created the admin token for network home, stored encrypted in ~/.config/vabbit/admin.json.
 ```
+
+`init` creates `~/.config/vabbit/admin.json`: the admin token of each network,
+encrypted with your master password (Argon2id + XChaCha20-Poly1305). Bunny only ever
+gets the token's SHA-256. `apply` and `rotate-admin` ask for the master password (or
+read `VABBIT_ADMIN_PASSWORD`); `plan` and `status` don't need it. The `vabbit` client
+reads the same file for its admin commands.
 
 ```toml
 api_key_env = "BUNNY_API_KEY"          # the variable's name, never the key
@@ -33,7 +42,6 @@ cidr = "100.93.0.0/16"
 | `replication_regions` | none | Extra storage regions, e.g. `["NY"]` |
 | `script_name` | `vabbit-<name>` | Edge script name, also its `*.b-cdn.net` hostname |
 | `storage_zone` | `vabbit-<name>-state` | Storage zone name |
-| `admin_token_sha256` | generated | Pin the admin token hash yourself instead |
 | `script` (top level) | built in | Path to a different `edge-script.js` |
 
 ## Commands
@@ -46,11 +54,11 @@ network home
   ...
 
 $ vabbit-deploy apply
+Master password: ***********
 network home
   create storage zone vabbit-home-state in DE
   create edge script vabbit-home with its own pull zone
   set secret STORAGE_ACCESS_KEY
-  generate an admin token
   set secret ADMIN_TOKEN_SHA256
   set NETWORK_NAME=home
   ...
@@ -58,15 +66,13 @@ network home
   url https://vabbit-home.b-cdn.net
   healthy
 
-  New admin token for home (shown once, keep it secret):
-    vba_...
-  Log in with: vabbit login --server https://vabbit-home.b-cdn.net
+Done. Manage the network with: vabbit keys create, vabbit devices ls
 
 $ vabbit-deploy status
 NETWORK      URL                                      HEALTH
 home         https://vabbit-home.b-cdn.net         ok
 
-$ vabbit-deploy rotate-admin -n home   # new admin token; devices keep working
+$ vabbit-deploy rotate-admin -n home   # new admin token in your login and on Bunny; devices keep working
 $ vabbit-deploy destroy -n home        # asks you to type the name first
 ```
 
@@ -75,15 +81,8 @@ $ vabbit-deploy destroy -n home        # asks you to type the name first
 ## In scripts and CI
 
 Every command exits non-zero on failure, so it fits in shell scripts and pipelines.
-Admin tokens are printed once, by the `apply` that creates a network and by
-`rotate-admin`. If you are the admin, pass `--login` (with `-n NAME`) instead: the token
-goes straight into `vabbit login`, encrypted with your master password, and is never
-printed. For a team of admins, `--admin-login-file FILE` writes it into a new file as an
-encrypted admin login to share (with the master password sent separately); each admin
-copies it to `~/.config/vabbit/admin.json` (mode 0600). To hand over the plain token
-instead, pass `--admin-token-file FILE`: the file is created
-(mode 0600) if missing and gets one `NETWORK URL TOKEN` line per new token. The admin
-then logs in with `vabbit login --token-file FILE`. `--no-wait` skips the health check after publishing.
+Set `VABBIT_ADMIN_PASSWORD` to supply the master password without a terminal, and keep
+`admin.json` in your CI's secret storage (it is encrypted, the password is not).
 
 ## Safety
 
@@ -96,5 +95,6 @@ then logs in with `vabbit login --token-file FILE`. `--no-wait` skips the health
 * `apply` refuses to change a network's CIDR (every enrolled device pins it) unless you
   pass `--allow-cidr-change`, and refuses to run when the storage zone has a pull zone
   attached, which would make the network's state public.
-* Once a network exists, `apply` keeps its admin token. Use `rotate-admin`, or set
-  `admin_token_sha256` in the file, to change it.
+* `apply` never replaces the admin token of a deployed network it has no token for
+  (e.g. on another machine without your `admin.json`); it stops and points you to
+  copying the file or to `rotate-admin`.

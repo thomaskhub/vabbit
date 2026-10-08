@@ -15,27 +15,27 @@
     .bad { stroke: #dc2626; stroke-width: 2.5; stroke-dasharray: 6 5; fill: none; }
   </style>
   <rect width="1200" height="720" fill="#ffffff"/>
-  <text x="30" y="44" font-size="24" font-weight="700" class="t">Use case 3 · Change the admin token (master password)</text>
+  <text x="30" y="44" font-size="24" font-weight="700" class="t">Use case 3 · Change the admin token</text>
   <text x="30" y="70" font-size="14" class="m">Rotate it any time, or right away if it may have leaked. Your nodes keep running throughout.</text>
   <g transform="translate(30,105)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">1</text>
     <text x="40" y="19" class="step">Make a new token</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">vabbit admin-token</text>
-    <text x="40" y="78" font-size="13" class="m">Prints a new vba_… token (keep it secret) and its SHA-256 hash.</text>
+    <text x="52" y="50" class="code">vabbit-deploy rotate-admin -n home</text>
+    <text x="40" y="78" font-size="13" class="m">Stores a new token in your encrypted admin login and deploys its hash.</text>
   </g>
   <g transform="translate(30,198)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">2</text>
-    <text x="40" y="19" class="step">Swap the hash in Bunny</text>
-    <text x="40" y="40" font-size="13" class="m">Edge Script → Environment → secret ADMIN_TOKEN_SHA256 → paste the</text>
-    <text x="40" y="58" font-size="13" class="m">new hash and save. From this moment the old token gets 401.</text>
+    <text x="40" y="19" class="step">Bunny switches over</text>
+    <text x="40" y="40" font-size="13" class="m">The edge script gets the new ADMIN_TOKEN_SHA256 and is</text>
+    <text x="40" y="58" font-size="13" class="m">published. From this moment the old token gets 401.</text>
   </g>
   <g transform="translate(30,280)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">3</text>
-    <text x="40" y="19" class="step">Log in again on each admin machine</text>
+    <text x="40" y="19" class="step">Update the other admins, if any</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">vabbit login --server https://home-net.b-cdn.net</text>
-    <text x="40" y="78" font-size="13" class="m">Paste the new token when asked. It replaces ~/.config/vabbit/admin.json.</text>
+    <text x="52" y="50" class="code">cp ~/.config/vabbit/admin.json …</text>
+    <text x="40" y="78" font-size="13" class="m">Give them the updated admin.json; the master password stays the same.</text>
   </g>
   <g transform="translate(30,375)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">4</text>

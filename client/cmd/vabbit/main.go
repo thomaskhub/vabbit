@@ -4,10 +4,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,7 +11,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -25,6 +20,7 @@ import (
 
 	"golang.org/x/term"
 
+	"vabbit/adminlogin"
 	"vabbit/internal/agent"
 	"vabbit/internal/api"
 	"vabbit/internal/state"
@@ -37,9 +33,8 @@ const usage = `vabbit - tiny WireGuard networks managed from a Bunny Edge Script
 
 Admin:
   vabbit admin-token                       generate an admin token and its SHA-256 for the edge script
-  vabbit login --server URL [--token T | --token-file F] [--no-password | --out FILE]
-                                           save admin credentials, encrypted with a master password
-  vabbit logout
+  vabbit login --server URL                add a network's admin token to your encrypted admin login
+  vabbit logout                            delete the admin login on this machine
   vabbit keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
   vabbit keys ls
   vabbit keys rm ID
@@ -55,6 +50,8 @@ Device (Linux, run as root):
   vabbit status [--iface vb0]
 
 The setup key can also be passed in VABBIT_SETUP_KEY to keep it out of the process list.
+Admin commands ask for the master password (or read VABBIT_ADMIN_PASSWORD); with several
+networks in the admin login, choose one with VABBIT_NETWORK=NAME.
 `
 
 func main() {
@@ -103,57 +100,36 @@ func main() {
 // ---- admin -------------------------------------------------------------------
 
 func cmdAdminToken() error {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	tok, sha, err := adminlogin.NewToken()
+	if err != nil {
 		return err
 	}
-	tok := "vba_" + base64.RawURLEncoding.EncodeToString(b)
-	sum := sha256.Sum256([]byte(tok))
 	fmt.Printf("Admin token (keep secret, give to `vabbit login`):\n  %s\n\n", tok)
-	fmt.Printf("Set this as the edge script secret ADMIN_TOKEN_SHA256:\n  %s\n", hex.EncodeToString(sum[:]))
+	fmt.Printf("Set this as the edge script secret ADMIN_TOKEN_SHA256:\n  %s\n", sha)
 	return nil
 }
 
 func cmdLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
 	server := fs.String("server", "", "control plane URL, e.g. https://mynet.b-cdn.net")
-	token := fs.String("token", "", "admin token (prompted if omitted)")
-	tokenFile := fs.String("token-file", "", "read the admin token from this file (mode 0600), or - for stdin: just the token, or the file vabbit-deploy --admin-token-file writes")
-	noPassword := fs.Bool("no-password", false, "store the token unencrypted (for unattended machines); default: protect it with a master password")
-	out := fs.String("out", "", "write the encrypted login to this new file to share with other admins, instead of logging in here")
 	fs.Parse(args)
-	if *out != "" {
-		if *noPassword {
-			return errors.New("--out always encrypts; a shared login must have a master password")
-		}
-		if _, err := os.Lstat(*out); err == nil {
-			return fmt.Errorf("%s already exists; remove it first", *out)
-		}
-	}
-	if *tokenFile != "" {
-		if *token != "" {
-			return errors.New("use --token or --token-file, not both")
-		}
-		var err error
-		if *server, *token, err = readTokenFile(*tokenFile, *server); err != nil {
-			return err
-		}
-	}
 	if *server == "" {
 		return errors.New("--server is required")
-	}
-	if *token == "" {
-		t, err := readSecret("Admin token: ")
-		if err != nil {
-			return err
-		}
-		*token = t
 	}
 	base, err := api.ValidateServer(*server)
 	if err != nil {
 		return err
 	}
-	c, err := api.New(base, *token)
+	var token string
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		token, err = adminlogin.Prompt("Admin token: ")
+	} else {
+		token, err = readLine(os.Stdin)
+	}
+	if err != nil {
+		return err
+	}
+	c, err := api.New(base, strings.TrimSpace(token))
 	if err != nil {
 		return err
 	}
@@ -161,68 +137,16 @@ func cmdLogin(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("login failed: %w", err)
 	}
-	path := *out
-	if path == "" {
-		if path, err = state.AdminPath(); err != nil {
-			return err
-		}
-	}
-	var pw []byte
-	if !*noPassword {
-		if pw, err = newMasterPassword(); err != nil {
-			return err
-		}
-	}
-	if err := state.SaveAdmin(path, state.Admin{Server: base, Token: *token}, pw); err != nil {
+	path, l, pw, err := openLogin(true)
+	if err != nil {
 		return err
 	}
-	if *out != "" {
-		fmt.Printf("Saved the admin login for network %q to %s, encrypted with the master password.\n", n.Name, path)
-		fmt.Printf("Share the file and, separately, the password. Each admin installs it with:\n")
-		fmt.Printf("  mkdir -p ~/.config/vabbit && install -m 600 %s ~/.config/vabbit/admin.json\n", filepath.Base(path))
-		return nil
+	l.Set(adminlogin.Network{Name: n.Name, Server: base, Token: strings.TrimSpace(token)})
+	if err := adminlogin.Save(path, l, pw); err != nil {
+		return err
 	}
-	how := "encrypted with your master password"
-	if *noPassword {
-		how = "unencrypted"
-	}
-	fmt.Printf("Logged in to network %q (%s). Credentials saved to %s (%s)\n", n.Name, n.CIDR, path, how)
+	fmt.Printf("Logged in to network %q (%s). Token saved encrypted in %s\n", n.Name, n.CIDR, path)
 	return nil
-}
-
-// passwordEnv lets scripts supply the master password without a terminal.
-const passwordEnv = "VABBIT_ADMIN_PASSWORD"
-
-// tty returns the terminal to prompt on: stdin, or /dev/tty when stdin is a
-// pipe (e.g. the token is piped in), or nil when there is none.
-func tty() *os.File {
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		return os.Stdin
-	}
-	if f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
-		if term.IsTerminal(int(f.Fd())) {
-			return f
-		}
-		f.Close()
-	}
-	return nil
-}
-
-// promptSecret asks on the terminal without echo.
-func promptSecret(t *os.File, prompt string) (string, error) {
-	fmt.Fprint(os.Stderr, prompt)
-	b, err := term.ReadPassword(int(t.Fd()))
-	fmt.Fprintln(os.Stderr)
-	return strings.TrimSpace(string(b)), err
-}
-
-// readSecret reads a line without echo from the terminal, or from stdin when
-// it is piped.
-func readSecret(prompt string) (string, error) {
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		return promptSecret(os.Stdin, prompt)
-	}
-	return readLine(os.Stdin)
 }
 
 func readLine(r io.Reader) (string, error) {
@@ -233,135 +157,60 @@ func readLine(r io.Reader) (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-func newMasterPassword() ([]byte, error) {
-	if pw := os.Getenv(passwordEnv); pw != "" {
-		return []byte(pw), nil
-	}
-	t := tty()
-	if t == nil {
-		return nil, fmt.Errorf("no terminal to ask for a master password; set %s or use --no-password", passwordEnv)
-	}
-	pw, err := promptSecret(t, "Master password (protects the token on this machine): ")
+// openLogin decrypts the admin login with the master password. With create,
+// a missing file starts an empty login under a new master password.
+func openLogin(create bool) (string, adminlogin.Login, []byte, error) {
+	var l adminlogin.Login
+	path, err := adminlogin.Path()
 	if err != nil {
-		return nil, err
+		return "", l, nil, err
 	}
-	if len(pw) < 8 {
-		return nil, errors.New("master password must be at least 8 characters (or use --no-password)")
+	if !adminlogin.Exists(path) {
+		if !create {
+			return path, l, nil, errors.New("not logged in as admin; run `vabbit-deploy init` (if you deploy) or `vabbit login --server URL`")
+		}
+		pw, err := adminlogin.NewPassword()
+		return path, l, pw, err
 	}
-	again, err := promptSecret(t, "Repeat master password: ")
+	pw, err := adminlogin.Password()
 	if err != nil {
-		return nil, err
+		return path, l, nil, err
 	}
-	if again != pw {
-		return nil, errors.New("passwords don't match")
-	}
-	return []byte(pw), nil
-}
-
-func masterPassword() ([]byte, error) {
-	if pw := os.Getenv(passwordEnv); pw != "" {
-		return []byte(pw), nil
-	}
-	t := tty()
-	if t == nil {
-		return nil, fmt.Errorf("the admin login is password-protected; run in a terminal or set %s", passwordEnv)
-	}
-	pw, err := promptSecret(t, "Master password: ")
-	return []byte(pw), err
-}
-
-// readTokenFile reads an admin token from a file that holds either just the
-// token or "NETWORK URL TOKEN" lines as written by vabbit-deploy. With several
-// lines, the newest one for server wins; server may be empty when the file
-// names only one URL.
-func readTokenFile(path, server string) (string, string, error) {
-	fh := os.Stdin
-	if path != "-" {
-		var err error
-		if fh, err = os.Open(path); err != nil {
-			return "", "", err
-		}
-		defer fh.Close()
-		if st, err := fh.Stat(); err != nil {
-			return "", "", err
-		} else if st.Mode().Perm()&0o077 != 0 {
-			return "", "", fmt.Errorf("%s is readable by other users; chmod 600 it first", path)
-		}
-	}
-	var err error
-	want := ""
-	if server != "" {
-		if want, err = api.ValidateServer(server); err != nil {
-			return "", "", err
-		}
-	}
-	tokens := map[string]string{} // URL -> newest token
-	var bare []string
-	sc := bufio.NewScanner(io.LimitReader(fh, 1<<20))
-	for sc.Scan() {
-		f := strings.Fields(sc.Text())
-		if len(f) == 0 || strings.HasPrefix(f[0], "#") {
-			continue
-		}
-		tok := f[len(f)-1]
-		if !strings.HasPrefix(tok, "vba_") {
-			continue
-		}
-		if len(f) == 1 {
-			bare = append(bare, tok)
-			continue
-		}
-		for _, w := range f[:len(f)-1] {
-			if u, err := api.ValidateServer(w); err == nil && strings.Contains(w, "://") {
-				tokens[u] = tok
-			}
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return "", "", err
-	}
-	switch {
-	case len(bare) == 1 && len(tokens) == 0:
-		return server, bare[0], nil
-	case len(bare) > 0:
-		return "", "", fmt.Errorf("%s: expected one token, or NETWORK URL TOKEN lines", path)
-	case want != "":
-		if tok, ok := tokens[want]; ok {
-			return server, tok, nil
-		}
-		return "", "", fmt.Errorf("%s has no token for %s", path, want)
-	case len(tokens) == 1:
-		for u, tok := range tokens {
-			return u, tok, nil
-		}
-	case len(tokens) > 1:
-		return "", "", fmt.Errorf("%s has tokens for several networks; pick one with --server", path)
-	}
-	return "", "", fmt.Errorf("%s: no vba_ admin token found", path)
+	l, err = adminlogin.Load(path, pw)
+	return path, l, pw, err
 }
 
 func cmdLogout() error {
-	path, err := state.AdminPath()
+	path, err := adminlogin.Path()
 	if err != nil {
 		return err
 	}
-	return state.Remove(path)
+	if !adminlogin.Exists(path) {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "This deletes %s, the admin tokens of your networks.\n", path)
+	fmt.Fprintln(os.Stderr, "Without a copy you'll need `vabbit-deploy rotate-admin` to manage them again.")
+	fmt.Fprint(os.Stderr, "Type yes to continue: ")
+	if line, _ := readLine(os.Stdin); line != "yes" {
+		return errors.New("not confirmed, nothing deleted")
+	}
+	return os.Remove(path)
 }
 
-func adminClient() (*api.Client, state.Admin, error) {
-	var a state.Admin
-	path, err := state.AdminPath()
+// networkEnv picks the network admin commands act on when the login has several.
+const networkEnv = "VABBIT_NETWORK"
+
+func adminClient() (*api.Client, adminlogin.Network, error) {
+	_, l, _, err := openLogin(false)
 	if err != nil {
-		return nil, a, err
+		return nil, adminlogin.Network{}, err
 	}
-	if a, err = state.LoadAdmin(path, masterPassword); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, a, errors.New("not logged in; run `vabbit login --server URL`")
-		}
-		return nil, a, err
+	n, err := l.Select(os.Getenv(networkEnv))
+	if err != nil {
+		return nil, n, err
 	}
-	c, err := api.New(a.Server, a.Token)
-	return c, a, err
+	c, err := api.New(n.Server, n.Token)
+	return c, n, err
 }
 
 func cmdKeys(ctx context.Context, args []string) error {

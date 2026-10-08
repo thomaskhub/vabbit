@@ -28,15 +28,11 @@ type Network struct {
 	StorageZone        string   `toml:"storage_zone"`
 	StorageRegion      string   `toml:"storage_region"`
 	ReplicationRegions []string `toml:"replication_regions"`
-	// AdminTokenSHA256 pins the admin token hash. Empty: generate a token on
-	// the first deploy and keep whatever is set after that.
-	AdminTokenSHA256 string `toml:"admin_token_sha256"`
 }
 
 var (
 	nameRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,40}$`)
 	zoneRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
-	hashRE   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	envRE    = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 	regions  = map[string]bool{"DE": true, "NY": true, "LA": true, "SG": true}
 	replicas = map[string]bool{"DE": true, "NY": true, "LA": true, "SG": true, "SYD": true}
@@ -107,10 +103,6 @@ func (f *File) normalize() error {
 				return fmt.Errorf("network %q: unknown replication region %q", n.Name, r)
 			}
 		}
-		n.AdminTokenSHA256 = strings.ToLower(n.AdminTokenSHA256)
-		if n.AdminTokenSHA256 != "" && !hashRE.MatchString(n.AdminTokenSHA256) {
-			return fmt.Errorf("network %q: admin_token_sha256 must be 64 hex characters (the hash, never the token)", n.Name)
-		}
 	}
 	return nil
 }
@@ -129,7 +121,8 @@ const Example = `# Vabbit networks on bunny.net. Deploy with:
 #   export BUNNY_API_KEY=...        # Account settings > API key
 #   vabbit-deploy apply
 #
-# Each [[network]] becomes one edge script and one private storage zone.
+# Each [[network]] becomes one edge script and one private storage zone. Admin
+# tokens are not in this file: they live encrypted in ~/.config/vabbit/admin.json.
 
 # Environment variable holding the Bunny API key. Never put the key in this file.
 api_key_env = "BUNNY_API_KEY"
@@ -141,7 +134,6 @@ storage_region = "DE"            # DE, NY, LA or SG
 # replication_regions = ["NY"]
 # script_name = "vabbit-home"          # default vabbit-<name>
 # storage_zone = "vabbit-home-state"   # default vabbit-<name>-state
-# admin_token_sha256 = ""        # empty: a token is generated on the first apply
 
 # [[network]]
 # name = "work"

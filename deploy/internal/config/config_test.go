@@ -35,7 +35,6 @@ func TestRejects(t *testing.T) {
 		"[[network]]\nname=\"Bad Name\"":                              "lowercase",
 		"[[network]]\nname=\"a\"\n[[network]]\nname=\"a\"":            "twice",
 		"[[network]]\nname=\"a\"\nstorage_region=\"XX\"":              "storage_region",
-		"[[network]]\nname=\"a\"\nadmin_token_sha256=\"vba_abc\"":     "never the token",
 		"": "no [[network]]",
 	} {
 		if _, err := load(t, body); err == nil || !strings.Contains(err.Error(), want) {

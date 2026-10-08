@@ -30,17 +30,126 @@
       "scope": "required",
       "type": "library",
       "version": "v1.4.0"
+    },
+    {
+      "bom-ref": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9093528c5fd7a7b914d2207667ef6f8933cc5b812aaacaf2c0c5cb24e3ac5d21"
+        }
+      ],
+      "name": "golang.org/x/crypto",
+      "purl": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.37.0"
+    },
+    {
+      "bom-ref": "pkg:golang/golang.org/x/sys@v0.32.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b3bece143bc841e89b0a67b34a793faba8807e476241a262e15ceba0216b376d"
+        }
+      ],
+      "name": "golang.org/x/sys",
+      "purl": "pkg:golang/golang.org/x/sys@v0.32.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.32.0"
+    },
+    {
+      "bom-ref": "pkg:golang/golang.org/x/term@v0.31.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "7abc0390e2b532ccbaa1f7e6d663a0beca5292c9459c81ac167c4e2a8b9f837a"
+        }
+      ],
+      "name": "golang.org/x/term",
+      "purl": "pkg:golang/golang.org/x/term@v0.31.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.31.0"
+    },
+    {
+      "bom-ref": "pkg:golang/vabbit@source?type=module",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "name": "vabbit",
+      "purl": "pkg:golang/vabbit@source?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "source"
     }
   ],
   "dependencies": [
     {
       "dependsOn": [
-        "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module"
+        "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module",
+        "pkg:golang/vabbit@source?type=module"
       ],
       "ref": "pkg:golang/vabbit-deploy@source?type=module#cmd/vabbit-deploy"
     },
     {
       "ref": "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module"
+    },
+    {
+      "dependsOn": [
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module",
+        "pkg:golang/golang.org/x/term@v0.31.0?type=module"
+      ],
+      "ref": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module"
+    },
+    {
+      "ref": "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+    },
+    {
+      "dependsOn": [
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+      ],
+      "ref": "pkg:golang/golang.org/x/term@v0.31.0?type=module"
+    },
+    {
+      "dependsOn": [
+        "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
+        "pkg:golang/golang.org/x/term@v0.31.0?type=module",
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+      ],
+      "ref": "pkg:golang/vabbit@source?type=module"
     }
   ],
   "metadata": {

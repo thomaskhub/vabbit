@@ -1,4 +1,4 @@
-// Package state persists device enrollment and admin login with tight permissions.
+// Package state persists device enrollment with tight permissions.
 package state
 
 import (
@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 )
 
@@ -27,23 +26,6 @@ type Device struct {
 const DefaultDir = "/var/lib/vabbit"
 
 func DevicePath(dir, iface string) string { return filepath.Join(dir, iface+".json") }
-
-// AdminPath is ~/.config/vabbit/admin.json for the invoking user, also
-// under sudo, so `sudo vabbit up` can reuse the admin login.
-func AdminPath() (string, error) {
-	if os.Geteuid() == 0 {
-		if su := os.Getenv("SUDO_USER"); su != "" {
-			if u, err := user.Lookup(su); err == nil {
-				return filepath.Join(u.HomeDir, ".config", "vabbit", "admin.json"), nil
-			}
-		}
-	}
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "vabbit", "admin.json"), nil
-}
 
 // Load reads JSON into v. It returns os.ErrNotExist if the file is missing and
 // refuses files that other users can read.

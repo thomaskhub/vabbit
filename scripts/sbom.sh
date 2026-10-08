@@ -10,12 +10,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 GOMOD=${CYCLONEDX_GOMOD:-cyclonedx-gomod}
-# License detection mislabels golang.org/x (the Go project's BSD-3-Clause license).
+# License detection mislabels golang.org/x (the Go project's BSD-3-Clause license) and
+# can't see this repo's LICENSE for the vabbit module that vabbit-deploy links; that
+# module is ../client, so its hash would change with every client edit.
 strip() {
   # GOVERSION is whichever Go built the SBOM, not something the binary depends on.
   jq -S 'del(.metadata.timestamp, .serialNumber, .metadata.tools)
     | .metadata.component.properties |= map(select(.name != "cdx:gomod:build:env:GOVERSION"))
-    | .components |= map(if (.name | startswith("golang.org/x/")) then .evidence.licenses = [{license: {id: "BSD-3-Clause"}}] else . end)' >"$1"
+    | .components |= map(if (.name | startswith("golang.org/x/")) then .evidence.licenses = [{license: {id: "BSD-3-Clause"}}] else . end)
+    | .components |= map(if .name == "vabbit" then (.licenses = [{license: {id: "MIT"}}] | del(.hashes)) else . end)' >"$1"
 }
 
 gomod_app() { # module dir, main package, output

@@ -18,6 +18,10 @@ The Go standard library (BSD-3-Clause) is linked into both Go binaries and not l
 | Component | Version | License |
 |---|---|---|
 | github.com/BurntSushi/toml | v1.4.0 | MIT |
+| golang.org/x/crypto | v0.37.0 | BSD-3-Clause |
+| golang.org/x/sys | v0.32.0 | BSD-3-Clause |
+| golang.org/x/term | v0.31.0 | BSD-3-Clause |
+| vabbit | source | MIT |
 
 ## edge
 

@@ -5,9 +5,7 @@ package deploy
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -33,9 +31,6 @@ type Options struct {
 type Result struct {
 	URL     string
 	Changed bool
-	// AdminToken is set only when apply generated a new admin token. It is
-	// shown once and stored nowhere.
-	AdminToken string
 }
 
 func (o Options) step(format string, a ...any) {
@@ -46,8 +41,9 @@ func (o Options) step(format string, a ...any) {
 	fmt.Fprintf(o.Out, prefix+format+"\n", a...)
 }
 
-// Apply makes Bunny match the network definition.
-func Apply(ctx context.Context, c *bunny.Client, n config.Network, code string, o Options) (Result, error) {
+// Apply makes Bunny match the network definition. adminHash is the SHA-256 of
+// the network's admin token; a plan may leave it empty.
+func Apply(ctx context.Context, c *bunny.Client, n config.Network, code, adminHash string, o Options) (Result, error) {
 	var res Result
 	fmt.Fprintf(o.Out, "network %s\n", n.Name)
 
@@ -81,10 +77,7 @@ func Apply(ctx context.Context, c *bunny.Client, n config.Network, code string, 
 		o.step("create edge script %s with its own pull zone", n.ScriptName)
 		res.Changed, created = true, true
 		if o.DryRun {
-			o.step("set variables, secrets and publish")
-			if n.AdminTokenSHA256 == "" {
-				o.step("generate an admin token")
-			}
+			o.step("set variables, secrets and the admin token, and publish")
 			return res, nil
 		}
 		if script, err = c.CreateScript(ctx, n.ScriptName, code); err != nil {
@@ -143,19 +136,13 @@ func Apply(ctx context.Context, c *bunny.Client, n config.Network, code string, 
 		return res, fmt.Errorf("list secrets: %w", err)
 	}
 	switch {
-	case n.AdminTokenSHA256 != "":
-		secrets = append(secrets, secret{"ADMIN_TOKEN_SHA256", n.AdminTokenSHA256, varAdminTokenID, adminTokenID(n.AdminTokenSHA256)})
+	case adminHash != "":
+		secrets = append(secrets, secret{"ADMIN_TOKEN_SHA256", adminHash, varAdminTokenID, adminTokenID(adminHash)})
+	case !o.DryRun:
+		return res, errors.New("no admin token")
 	case !names["ADMIN_TOKEN_SHA256"]:
-		o.step("generate an admin token")
+		o.step("set the admin token")
 		res.Changed = true
-		if !o.DryRun {
-			tok, hash, err := NewAdminToken()
-			if err != nil {
-				return res, err
-			}
-			res.AdminToken = tok
-			secrets = append(secrets, secret{"ADMIN_TOKEN_SHA256", hash, varAdminTokenID, adminTokenID(hash)})
-		}
 	}
 	for _, s := range secrets {
 		if v, ok := script.Variable(s.idVar); names[s.name] && ok && v.DefaultValue == s.id {
@@ -200,33 +187,16 @@ func Apply(ctx context.Context, c *bunny.Client, n config.Network, code string, 
 	return res, nil
 }
 
-// RotateAdmin replaces the network's admin token and returns the new one and
-// the network's URL. The old token stops working once the new release is live.
-func RotateAdmin(ctx context.Context, c *bunny.Client, n config.Network) (token, url string, err error) {
-	if n.AdminTokenSHA256 != "" {
-		return "", "", fmt.Errorf("network %s pins admin_token_sha256 in the config; change it there and run apply", n.Name)
-	}
+// HasAdminToken reports whether the network is deployed with an admin token.
+func HasAdminToken(ctx context.Context, c *bunny.Client, n config.Network) (bool, error) {
 	script, err := c.FindScript(ctx, n.ScriptName)
-	if err != nil {
-		return "", "", fmt.Errorf("edge script %s: %w (run apply first)", n.ScriptName, err)
+	if errors.Is(err, bunny.ErrNotFound) {
+		return false, nil
+	} else if err != nil {
+		return false, err
 	}
-	tok, hash, err := NewAdminToken()
-	if err != nil {
-		return "", "", err
-	}
-	if err := c.UpsertSecret(ctx, script.ID, "ADMIN_TOKEN_SHA256", hash); err != nil {
-		return "", "", err
-	}
-	if err := c.UpsertVariable(ctx, script.ID, varAdminTokenID, adminTokenID(hash)); err != nil {
-		return "", "", err
-	}
-	if err := c.Publish(ctx, script.ID, "vabbit-deploy: rotate admin token"); err != nil {
-		return "", "", err
-	}
-	if h := script.Hostname(); h != "" {
-		url = "https://" + h
-	}
-	return tok, url, nil
+	names, err := c.SecretNames(ctx, script.ID)
+	return names["ADMIN_TOKEN_SHA256"], err
 }
 
 // Destroy deletes the edge script (with its pull zone) and the storage zone.
@@ -249,18 +219,6 @@ func Destroy(ctx context.Context, c *bunny.Client, n config.Network, out io.Writ
 		return err
 	}
 	return nil
-}
-
-// NewAdminToken returns a token in the same format as `vabbit admin-token`
-// and its SHA-256.
-func NewAdminToken() (token, sha string, err error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", "", err
-	}
-	token = "vba_" + base64.RawURLEncoding.EncodeToString(b)
-	sum := sha256.Sum256([]byte(token))
-	return token, hex.EncodeToString(sum[:]), nil
 }
 
 // adminTokenID is a short public id of the admin token hash, so you can tell

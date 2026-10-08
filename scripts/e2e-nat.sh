@@ -120,7 +120,7 @@ run() {
   local mode=$1
   echo "=== $mode NAT"
   setup "$mode"
-  x hub "$EG" login --server $SRV --token "$TOKEN" >/dev/null
+  echo "$TOKEN" | x hub "$EG" login --server $SRV >/dev/null
   agent hub --endpoint 203.0.113.10:51820 --hub
   sleep 2
   for n in lap phone; do VABBIT_SETUP_KEY=$(x hub "$EG" keys create 2>/dev/null) agent "$n"; done

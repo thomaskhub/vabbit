@@ -12,11 +12,18 @@ With `vabbit-deploy` ([DEPLOY.md](DEPLOY.md)) this is one command:
 
 ```console
 $ export BUNNY_API_KEY=...
-$ vabbit-deploy init && vabbit-deploy apply
+$ vabbit-deploy init
+New master password: ***********
+Repeat master password: ***********
+Created the admin token for network home, stored encrypted in ~/.config/vabbit/admin.json.
+$ vabbit-deploy apply
+Master password: ***********
+  ...
   url https://vabbit-home.b-cdn.net
-  New admin token for home (shown once, keep it secret):
-    vba_Q3x…k9w
 ```
+
+That's it: your laptop is now the admin for `home`. The examples below call the URL
+`https://home-net.b-cdn.net`.
 
 Or by hand:
 
@@ -36,21 +43,25 @@ In Bunny: create a Storage zone `home-state`, create an Edge Script from
 
 ```console
 $ vabbit login --server https://home-net.b-cdn.net
-Admin token:
-Master password (protects the token on this machine):
-Repeat master password:
-Logged in to network "home" (100.92.0.0/16). Credentials saved to ~/.config/vabbit/admin.json (encrypted with your master password)
+Admin token: ****************************************
+Choose a master password. …
+New master password: ***********
+Repeat master password: ***********
+Logged in to network "home" (100.92.0.0/16). Token saved encrypted in ~/.config/vabbit/admin.json
 ```
 
 ## 2. The hub (cloud VM with a public IP)
 
-Open UDP 51820 and TCP 443 in the VM's firewall. Log in as admin there too (a hub
-can only be made by the admin), then:
+Open UDP 51820 and TCP 443 in the VM's firewall. Enroll it with a setup key, then
+make it the hub from your laptop (only the admin can), so the admin token never
+touches the VM:
 
 ```console
-vm$ vabbit login --server https://home-net.b-cdn.net
-vm$ sudo vabbit up --endpoint 203.0.113.10:51820 --hub
-Enrolled as vm (6bfb0852b06969c6) with address 100.92.194.44
+$ vabbit keys create
+vm$ sudo VABBIT_SETUP_KEY=vbk_… vabbit up --server https://home-net.b-cdn.net --endpoint 203.0.113.10:51820 --dry-run
+vm$ sudo systemctl enable --now vabbit@vb0
+$ vabbit devices set <vm id> --hub=true
+vm$ journalctl -u vabbit@vb0
 interface vb0 up with 100.92.194.44/16 (hub: true)
 TCP relay for UDP-blocked networks on 203.0.113.10:443
 ```
@@ -154,8 +165,8 @@ $ vabbit devices set c0257e2673d112c2 --expires never
 An expired machine drops out of everyone's peer list straight away and its own
 agent shuts the interface down on its next sync.
 
-To revoke the admin token itself, run `vabbit admin-token` again, replace the hash
-in Bunny and `vabbit login` with the new token. Devices are not affected.
+To replace the admin token itself, run `vabbit-deploy rotate-admin -n home`: it stores a
+new token in your admin login and deploys its hash. Devices are not affected.
 
 ## 8. Removing things
 
@@ -169,8 +180,10 @@ $ sudo vabbit down                      # stop the VPN on this machine (stays en
 
 ## A second, separate network
 
-Deploy the edge script again with its own storage zone, admin token and
-`NETWORK_CIDR` (e.g. `100.93.0.0/16`), then use another interface name per network:
+Add a second `[[network]]` with its own `cidr` (e.g. `100.93.0.0/16`) to `vabbit.toml`
+and run `vabbit-deploy apply`; it gets its own admin token in the same admin login.
+Choose the network for admin commands with `VABBIT_NETWORK=work vabbit keys create`.
+Devices use another interface name per network:
 
 ```console
 $ sudo VABBIT_SETUP_KEY=vbk_… vabbit up --server https://work-net.b-cdn.net --iface vb1

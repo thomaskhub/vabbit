@@ -22,14 +22,14 @@
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">1</text>
     <text x="40" y="19" class="step">Once: create the network</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">vabbit admin-token</text>
-    <text x="40" y="78" font-size="13" class="m">Paste the printed hash into the Bunny Edge Script as ADMIN_TOKEN_SHA256.</text>
+    <text x="52" y="50" class="code">vabbit-deploy init &amp;&amp; vabbit-deploy apply</text>
+    <text x="40" y="78" font-size="13" class="m">Asks for a master password; the admin token is kept encrypted on your laptop.</text>
   </g>
   <g transform="translate(30,200)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">2</text>
-    <text x="40" y="19" class="step">Log in as admin (your laptop)</text>
+    <text x="40" y="19" class="step">You are now the admin (your laptop)</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">vabbit login --server https://home-net.b-cdn.net</text>
+    <text x="52" y="50" class="code">vabbit keys create</text>
   </g>
   <g transform="translate(30,275)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">3</text>

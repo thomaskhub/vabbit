@@ -23,76 +23,99 @@ See [docs/USAGE.md](docs/USAGE.md) for a full walkthrough and [docs/DESIGN.md](d
 
 | Role | Tool | Does |
 |---|---|---|
-| [Infrastructure](#infrastructure-deploy-a-network) | `vabbit-deploy` | Creates the network on bunny.net, once per network. Needs the Bunny API key. |
-| [Admin](#admin-manage-the-network) | `vabbit` | Logs in with the admin token, hands out setup keys, manages devices and hubs. |
-| [Users](#users-connect-a-device) | `vabbit` | Connects a laptop, server or VM with a setup key. Needs root, no admin rights. |
+| [Admin](#admin-deploy-and-manage-a-network) | `vabbit-deploy`, `vabbit` | Deploys the network on bunny.net, hands out setup keys, manages devices and hubs. |
+| [Users](#users-connect-a-device) | `vabbit` | Connect a laptop, server or VM with a setup key. Need root, no admin rights. |
 
-A typical first setup: infrastructure deploys the network, the admin logs in and
-[sets up a hub](#setting-up-a-hub), and users join with setup keys.
+## Admin: deploy and manage a network
 
-## Infrastructure: deploy a network
-
-`vabbit-deploy` creates a private storage zone and an edge script per network from a
-config file, and is safe to run again after every change ([docs/DEPLOY.md](docs/DEPLOY.md)).
+One flow, three commands:
 
 ```sh
-make deploy && export BUNNY_API_KEY=...          # Bunny: Account settings > API key
-./dist/vabbit-deploy init                        # writes vabbit.toml; edit it
-./dist/vabbit-deploy plan                        # shows what would change
-./dist/vabbit-deploy apply -n home --login        # if you are also the admin (see below)
+make build && export BUNNY_API_KEY=...   # Bunny: Account settings > API key
+./dist/vabbit-deploy init                # writes vabbit.toml, asks for a master password,
+                                         # creates the admin token (stored encrypted)
+./dist/vabbit-deploy apply               # deploys every network in vabbit.toml
+./dist/vabbit keys create                # you're ready: hand out setup keys
 ```
 
-**Where the admin token comes from.** Bunny only ever stores the token's hash, so the
-token itself exists in exactly one place: what `apply` hands you the first time it creates
-a network (later runs keep the existing token and print nothing).
+`init` creates `~/.config/vabbit/admin.json`, which holds the admin token of each of
+your networks, **encrypted with your master password** (Argon2id + XChaCha20-Poly1305).
+The password is typed as `***`. Bunny only ever gets the token's hash, and nothing is
+printed or written in clear. `apply` records each network's URL in the same file, so
+`vabbit` admin commands work right away. Every admin command asks for the master
+password; scripts can set `VABBIT_ADMIN_PASSWORD` instead.
 
-* **You are the admin too:** `apply -n NAME --login` hands the token straight to
-  `vabbit login`, which asks for your master password and stores it encrypted. The
-  token is never shown or written in clear. Needs `vabbit` next to `vabbit-deploy` or
-  on `PATH`.
-* **A team of admins:** `apply -n NAME --admin-login-file team-admin.json` writes the
-  token into a new file as an encrypted admin login, asking for a master password. Share
-  the file over any channel and the password separately (e.g. a team password manager).
-  Each admin installs it with
-  `mkdir -p ~/.config/vabbit && install -m 600 team-admin.json ~/.config/vabbit/admin.json`.
-  Everyone shares one token: to remove someone, `rotate-admin` and share a new file.
-* **Someone else is the admin, in clear:** `apply` prints the token once on screen, and
-  `--admin-token-file admin-tokens.txt` also appends it to that file, which `apply`
-  creates for you (mode 0600). Each line is `NETWORK URL TOKEN`:
-  ```
-  home https://vabbit-home.b-cdn.net vba_3kX…
-  ```
-  `rotate-admin` takes `--login`, `--admin-login-file` and `--admin-token-file` the same way.
+Change `vabbit.toml` and run `apply` again whenever you like: it only changes what
+differs. To add a network, add a `[[network]]` block and `apply`; it gets its own token.
 
-In the last case, give the token (or the file) to the admin over a secure channel,
-then delete your copy.
-The admin logs in with `vabbit login --token-file admin-tokens.txt`, or pastes the token
-into `vabbit login --server URL`. A lost token can't be recovered; make a new one with
-`vabbit-deploy rotate-admin -n NAME`.
+**More admins.** Copy `admin.json` to their `~/.config/vabbit/` (mode 0600) and give
+them the master password separately. The file is useless without the password, so it
+can travel over normal channels. Everyone shares the token: to remove someone, run
+`vabbit-deploy rotate-admin -n NAME` and share the new file. With several networks in
+the file, pick one per command with `VABBIT_NETWORK=NAME`.
+
+**Lost the file or password?** Bunny keeps only the hash, so the token can't be recovered.
+`vabbit-deploy rotate-admin -n NAME` makes a new one (needs the Bunny API key). Devices
+keep working.
+
+### `vabbit-deploy` (needs `BUNNY_API_KEY`)
 
 | Command | What it does |
 |---|---|
-| `vabbit-deploy init` | Write an example config file. |
+| `vabbit-deploy init` | Write an example `vabbit.toml` and create your encrypted admin login with a token per network. |
 | `vabbit-deploy plan` | Show what `apply` would change, without changing anything. |
 | `vabbit-deploy apply` | Create or update every network on Bunny. Safe to run repeatedly. |
 | `vabbit-deploy status` | Show each network's URL and whether it answers. |
-| `vabbit-deploy rotate-admin -n NAME` | Replace a network's admin token and print the new one. |
+| `vabbit-deploy rotate-admin -n NAME` | Replace a network's admin token (in your admin login and on Bunny). |
 | `vabbit-deploy destroy -n NAME` | Delete a network's edge script and storage zone. Asks you to type the name. |
 
-| Flag | Commands | Default | Meaning |
-|---|---|---|---|
-| `-f FILE` | all | `vabbit.toml` | Config file (for `init`: the file to write). |
-| `-n NAME` | plan, apply, status, rotate-admin, destroy | all networks | Only this network. Required for `rotate-admin` and `destroy`. |
-| `--script FILE` | plan, apply | built in | Deploy this built edge script instead of the bundled one. |
-| `--allow-cidr-change` | plan, apply | off | Allow changing a network's CIDR. Every enrolled device must re-enroll. |
-| `--admin-token-file FILE` | apply, rotate-admin | | Also append new admin tokens to this file (mode 0600) as `NETWORK URL TOKEN` lines, for `vabbit login --token-file`. |
-| `--login` | apply, rotate-admin | off | Save a new admin token straight into your `vabbit login` (encrypted with your master password) instead of printing it. Needs a single network (`-n`). |
-| `--admin-login-file FILE` | apply, rotate-admin | | Write a new admin token into this new file as an encrypted admin login (asks for a master password), to share with other admins. Needs a single network (`-n`). |
-| `--no-wait` | apply | off | Don't wait for the network to answer after publishing. |
-| `--yes` | destroy | off | Don't ask for confirmation. |
+| Flag | Meaning |
+|---|---|
+| `-f FILE` | Config file (default `vabbit.toml`). |
+| `-n NAME` | Only this network (default: all). Required for `rotate-admin` and `destroy`. |
+| `--allow-cidr-change` | `plan`/`apply`: allow changing a network's address range. Every device must re-enroll. |
+| `--yes` | `destroy`: don't ask for confirmation. |
 
-The Bunny API key is read from the environment variable named by `api_key_env` in the
-config (default `BUNNY_API_KEY`) and never written to a file.
+Settings live in `vabbit.toml` (see [docs/DEPLOY.md](docs/DEPLOY.md)); the Bunny API key
+is read from the environment variable named by `api_key_env` (default `BUNNY_API_KEY`).
+
+### `vabbit` admin commands
+
+```sh
+vabbit keys create                     # one-time setup key for a new device (valid 24h)
+vabbit keys create --reusable --ttl 7d --device-ttl 30d  # e.g. for a fleet of short-lived VMs
+vabbit devices ls
+vabbit devices set <id> --hub=true     # see "Setting up a hub"
+vabbit devices rm <id>                 # cut off on its next sync (≤15s)
+```
+
+| Command | What it does |
+|---|---|
+| `vabbit keys create` | Create a setup key for enrolling a device. |
+| `vabbit keys ls` | List setup keys. |
+| `vabbit keys rm ID` | Delete a setup key. |
+| `vabbit devices ls` | List devices. |
+| `vabbit devices set ID` | Rename a device, make it a hub, or set when its access expires. |
+| `vabbit devices rm ID` | Remove a device; it is cut off on its next sync. |
+| `vabbit login --server URL` | Add a network you didn't deploy with `vabbit-deploy` (asks for its token). |
+| `vabbit logout` | Delete the admin login on this machine. |
+
+**`vabbit keys create`**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--reusable` | off | Let the key enroll more than one device. |
+| `--max-uses N` | `0` (unlimited) | Limit how often a reusable key can be used. |
+| `--ttl DURATION` | `24h` | How long the key can be used, e.g. `2h`, `7d` or `never`. |
+| `--device-ttl DURATION` | `never` | Devices enrolled with this key lose access this long after joining, e.g. `7d`. |
+
+**`vabbit devices set ID`**
+
+| Flag | Meaning |
+|---|---|
+| `--name NAME` | Rename the device. |
+| `--hub=true\|false` | Make the device a hub, or stop it being one. A hub needs a public endpoint. |
+| `--expires DURATION` | Remove the device's access this long from now (e.g. `7d`), or `never`. |
 
 <details>
 <summary>Without vabbit-deploy: set it up by hand in the Bunny dashboard</summary>
@@ -115,66 +138,9 @@ config (default `BUNNY_API_KEY`) and never written to a file.
    | `NETWORK_NAME` | variable | optional, shown in the CLI |
 
    The script answers `503 server misconfigured` until all required values are set.
+5. `vabbit login --server https://<script hostname>` and paste the token.
 
 </details>
-
-## Admin: manage the network
-
-The admin logs in once per machine. The login is stored in `~/.config/vabbit/admin.json`
-(mode 0600) with the token **encrypted by a master password** you choose at login
-(Argon2id + XChaCha20-Poly1305), so a stolen laptop disk or backup doesn't give away
-the network. Admin commands ask for the master password each time; scripts can set
-`VABBIT_ADMIN_PASSWORD` instead. Keep the login on your own laptop, not on servers.
-
-```sh
-vabbit login --server https://mynet.b-cdn.net            # prompts for the token and a master password
-vabbit login --token-file admin-tokens.txt               # or from the file vabbit-deploy apply wrote
-
-vabbit keys create                     # one-time setup key for a new device (valid 24h)
-vabbit keys create --reusable --ttl 7d --device-ttl 30d  # e.g. for a fleet of short-lived VMs
-vabbit devices ls
-vabbit devices set <id> --hub=true     # see "Setting up a hub"
-vabbit devices rm <id>                 # cut off on its next sync (≤15s)
-```
-
-| Command | What it does |
-|---|---|
-| `vabbit login` | Log in as admin to a network. |
-| `vabbit logout` | Forget the admin login on this machine. |
-| `vabbit keys create` | Create a setup key for enrolling a device. |
-| `vabbit keys ls` | List setup keys. |
-| `vabbit keys rm ID` | Delete a setup key. |
-| `vabbit devices ls` | List devices. |
-| `vabbit devices set ID` | Rename a device, make it a hub, or set when its access expires. |
-| `vabbit devices rm ID` | Remove a device; it is cut off on its next sync. |
-| `vabbit admin-token` | Print a new admin token and its SHA-256 (only for manual setups). |
-
-**`vabbit login`**
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `--server URL` | | Control plane URL, e.g. `https://mynet.b-cdn.net`. |
-| `--token TOKEN` | prompted | Admin token (`vba_…`). Leave it out to be prompted, so it stays out of shell history. |
-| `--no-password` | off | Store the token unencrypted, for unattended machines without anyone to type a password. |
-| `--out FILE` | | Write the encrypted login to this new file to share with other admins, instead of logging in on this machine. |
-| `--token-file FILE` | | Read the token from a file (mode 0600), or `-` for stdin: just the token, or the lines `vabbit-deploy --admin-token-file` writes. Then the newest token for `--server` is used, and `--server` can be left out if the file names one network. |
-
-**`vabbit keys create`**
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `--reusable` | off | Let the key enroll more than one device. |
-| `--max-uses N` | `0` (unlimited) | Limit how often a reusable key can be used. |
-| `--ttl DURATION` | `24h` | How long the key can be used, e.g. `2h`, `7d` or `never`. |
-| `--device-ttl DURATION` | `never` | Devices enrolled with this key lose access this long after joining, e.g. `7d`. |
-
-**`vabbit devices set ID`**
-
-| Flag | Meaning |
-|---|---|
-| `--name NAME` | Rename the device. |
-| `--hub=true\|false` | Make the device a hub, or stop it being one. A hub needs a public endpoint. |
-| `--expires DURATION` | Remove the device's access this long from now (e.g. `7d`), or `never`. |
 
 ## Users: connect a device
 
@@ -293,7 +259,7 @@ fallback exists. Details in [docs/DESIGN.md](docs/DESIGN.md).
 make test                                   # edge (bun test) + client (go test)
 sudo ./scripts/e2e-nat.sh                   # real tunnels: home NATs, symmetric NATs, UDP-blocked hotel
 cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :8787, in memory
-vabbit login --server http://127.0.0.1:8787 --token vba_...
+echo vba_... | vabbit login --server http://127.0.0.1:8787   # token from vabbit admin-token
 sudo vabbit up --dry-run                 # syncs once and prints the peers instead of starting
 ```
 
