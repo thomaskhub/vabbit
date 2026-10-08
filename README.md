@@ -19,6 +19,16 @@ See [docs/USAGE.md](docs/USAGE.md) for a full walkthrough and [docs/DESIGN.md](d
 
 ## 1. Deploy a network (once per network)
 
+The quick way, with a config file and the Bunny API ([docs/DEPLOY.md](docs/DEPLOY.md)):
+
+```sh
+make deploy && export BUNNY_API_KEY=...
+./dist/edgeguard-deploy init      # writes edgeguard.toml; edit it
+./dist/edgeguard-deploy apply     # creates storage + edge script, prints URL and admin token
+```
+
+Or by hand in the Bunny dashboard:
+
 1. Build the client (`make client`, Go 1.22+) or download a CI artifact.
 2. Generate the admin token:
    ```sh

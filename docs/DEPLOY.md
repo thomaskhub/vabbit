@@ -1,0 +1,93 @@
+# Deploying networks with `edgeguard-deploy`
+
+`edgeguard-deploy` sets up everything on bunny.net from one TOML file: a private
+storage zone and an edge script per network, with all variables and secrets, then
+publishes it. Run it again whenever you like; it only changes what differs.
+
+## Setup
+
+```console
+$ make deploy                         # builds dist/edgeguard-deploy with the edge script inside
+$ export BUNNY_API_KEY=...            # bunny.net > Account settings > API key
+$ edgeguard-deploy init               # writes edgeguard.toml
+```
+
+```toml
+api_key_env = "BUNNY_API_KEY"          # the variable's name, never the key
+
+[[network]]
+name = "home"
+cidr = "100.92.0.0/16"
+storage_region = "DE"                  # DE, NY, LA or SG
+
+[[network]]
+name = "work"
+cidr = "100.93.0.0/16"
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `name` | required | Network name, also used for the Bunny resource names |
+| `cidr` | `100.92.0.0/16` | VPN addresses. Can't change once devices exist |
+| `storage_region` | `DE` | Main region of the storage zone |
+| `replication_regions` | none | Extra storage regions, e.g. `["NY"]` |
+| `script_name` | `edgeguard-<name>` | Edge script name, also its `*.b-cdn.net` hostname |
+| `storage_zone` | `edgeguard-<name>-state` | Storage zone name |
+| `admin_token_sha256` | generated | Pin the admin token hash yourself instead |
+| `script` (top level) | built in | Path to a different `edge-script.js` |
+
+## Commands
+
+```console
+$ edgeguard-deploy plan               # shows what would change, changes nothing
+network home
+  would create storage zone edgeguard-home-state in DE
+  would create edge script edgeguard-home with its own pull zone
+  ...
+
+$ edgeguard-deploy apply
+network home
+  create storage zone edgeguard-home-state in DE
+  create edge script edgeguard-home with its own pull zone
+  set secret STORAGE_ACCESS_KEY
+  generate an admin token
+  set secret ADMIN_TOKEN_SHA256
+  set NETWORK_NAME=home
+  ...
+  publish
+  url https://edgeguard-home.b-cdn.net
+  healthy
+
+  New admin token for home (shown once, keep it secret):
+    ega_...
+  Log in with: edgeguard login --server https://edgeguard-home.b-cdn.net
+
+$ edgeguard-deploy status
+NETWORK      URL                                      HEALTH
+home         https://edgeguard-home.b-cdn.net         ok
+
+$ edgeguard-deploy rotate-admin -n home   # new admin token; devices keep working
+$ edgeguard-deploy destroy -n home        # asks you to type the name first
+```
+
+`-f FILE` picks another config file and `-n NAME` limits a command to one network.
+
+## In scripts and CI
+
+Every command exits non-zero on failure, so it fits in shell scripts and pipelines.
+Admin tokens are printed once; to capture them, pass `--admin-token-file FILE`
+(created with mode 0600). `--no-wait` skips the health check after publishing.
+
+## Safety
+
+* The Bunny API key is read only from the environment and is never written anywhere.
+  It can do anything on your Bunny account, so keep it out of the config file and
+  out of shell history (`read -s BUNNY_API_KEY; export BUNNY_API_KEY`).
+* `apply` never prints secret values. It can't read secrets back from Bunny, so it
+  stores short fingerprints (`ADMIN_TOKEN_ID`, `STORAGE_KEY_ID`) as plain variables
+  to know whether a secret is current. They reveal nothing about the secrets.
+* `apply` refuses to change a network's CIDR (every enrolled device pins it) unless you
+  pass `--allow-cidr-change`, and refuses to run when the storage zone has a pull zone
+  attached, which would make the network's state public.
+* Once a network exists, `apply` keeps its admin token. Use `rotate-admin`, or set
+  `admin_token_sha256` in the file, to change it.

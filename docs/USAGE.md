@@ -6,7 +6,19 @@ Pictures of the three common tasks: [connect four nodes](use-cases/1-connect-fou
 An example: one network called `home`, a cloud VM as the hub, a home-lab server,
 and a laptop. `$` lines run on the machine named in each heading.
 
-## 1. One-time setup (your laptop + Bunny dashboard)
+## 1. One-time setup (your laptop + Bunny)
+
+With `edgeguard-deploy` ([DEPLOY.md](DEPLOY.md)) this is one command:
+
+```console
+$ export BUNNY_API_KEY=...
+$ edgeguard-deploy init && edgeguard-deploy apply
+  url https://edgeguard-home.b-cdn.net
+  New admin token for home (shown once, keep it secret):
+    ega_Q3x…k9w
+```
+
+Or by hand:
 
 ```console
 $ edgeguard admin-token
