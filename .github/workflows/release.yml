@@ -1,9 +1,15 @@
 name: release
-# Push a tag like v0.1.0 to publish binaries, the systemd unit, the installer and
-# checksums as a GitHub release (used by scripts/install.sh).
+# Push a tag like v0.1.0 (or run this workflow by hand with a tag name) to publish
+# binaries, the systemd unit, the installer and checksums as a GitHub release (used by
+# scripts/install.sh). A hand run creates the tag on the commit it runs from.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.1.0 or v0.1.0-rc.1"
+        required: true
 
 permissions:
   contents: write
@@ -21,9 +27,10 @@ jobs:
           go-version-file: client/go.mod
       - name: Build
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.tag || github.ref_name }}
         run: |
           set -eu
+          case "$VERSION" in v[0-9]*) ;; *) echo "tag must look like v0.1.0" >&2; exit 1 ;; esac
           mkdir -p out
           (cd edge && bun install --frozen-lockfile && bun run build)
           cp edge/dist/edge-script.js deploy/edgescript/bundle/
@@ -40,8 +47,15 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         # Tags with a suffix (v0.1.0-rc.1) become pre-releases, so "latest" skips them.
+        # A release made by hand in the GitHub UI just gets the files attached.
         run: |
+          set -eu
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" out/* --clobber
+            exit 0
+          fi
           pre=""
-          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes $pre
+          case "$TAG" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" out/* --target "$GITHUB_SHA" --title "$TAG" --generate-notes $pre
