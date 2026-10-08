@@ -1,23 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Vabbit logo">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0f766e"/>
-      <stop offset="1" stop-color="#1e1b4b"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 320 290" width="320" height="290" role="img" aria-label="Vabbit">
+<defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#0d9488"/>
     </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
-  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
-  <g fill="#f8fafc">
-    <path d="M57 74 C 46 58, 34 34, 36 18 C 38 6, 50 6, 55 18 C 60 32, 63 54, 63 74 Z"/>
-    <path d="M71 74 C 82 58, 94 34, 92 18 C 90 6, 78 6, 73 18 C 68 32, 65 54, 65 74 Z"/>
-  </g>
-  <g fill="#f9a8d4" opacity=".9">
-    <path d="M57 64 C 50 52, 43 36, 44 24 C 45 16, 50 16, 52 23 C 55 34, 58 50, 59 64 Z"/>
-    <path d="M71 64 C 78 52, 85 36, 84 24 C 83 16, 78 16, 76 23 C 73 34, 70 50, 69 64 Z"/>
-  </g>
-  <path d="M20 62 L64 108 L108 62" fill="none" stroke="#5eead4" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
-  <path d="M41 84 L87 84" fill="none" stroke="#5eead4" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round" opacity=".85"/>
-  <g fill="#f8fafc" stroke="#134e4a" stroke-width="3">
-    <circle cx="20" cy="62" r="7"/><circle cx="41" cy="84" r="7"/><circle cx="64" cy="108" r="9"/>
-    <circle cx="87" cy="84" r="7"/><circle cx="108" cy="62" r="7"/>
-  </g>
+  <!-- ears -->
+  <path d="M76 0 C 130 22, 200 62, 264 108 L 236 126 C 190 84, 130 40, 76 0 Z" fill="#34d399"/>
+  <path d="M70 30 C 120 46, 180 84, 236 118 L 212 132 C 170 96, 120 60, 70 30 Z" fill="#0f9f8a"/>
+  <!-- circuit trace -->
+  <path d="M90 132 L90 98 L136 86" fill="none" stroke="#2dd4bf" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="136" cy="86" r="5" fill="#2dd4bf"/>
+  <!-- tail -->
+  <circle cx="62" cy="150" r="17" fill="#14b8a6"/>
+  <!-- hind leg -->
+  <path d="M96 150 C 62 182, 40 230, 0 266 L 32 266 C 72 236, 104 214, 130 200 Z" fill="#10b981"/>
+  <!-- body -->
+  <path d="M236 122 C 196 96, 120 100, 84 136 C 62 158, 58 196, 72 214 C 100 224, 150 222, 196 206 C 226 194, 244 168, 248 146 Z" fill="url(#g1)"/>
+  <!-- head -->
+  <path d="M206 104 C 232 90, 262 100, 302 138 L 296 150 C 272 158, 244 162, 220 154 C 208 140, 204 120, 206 104 Z" fill="url(#g2)"/>
+  <path d="M250 118 L 272 124 L 254 128 Z" fill="#0b1f3a"/>
+  <!-- front leg -->
+  <path d="M228 176 C 260 186, 284 212, 300 240 L 284 246 C 268 222, 250 204, 222 192 Z" fill="url(#blue)"/>
+  <!-- shield -->
+  <path d="M104 172 Q 168 150 236 162 L232 214 Q 218 248 180 266 Q 140 246 118 214 Z" fill="none" stroke="url(#blue)" stroke-width="9" stroke-linejoin="round"/>
+  <!-- toggle -->
+  <rect x="120" y="152" width="80" height="40" rx="20" fill="#0b1f3a" stroke="#38bdf8" stroke-width="5" filter="url(#glow)"/>
+  <circle cx="178" cy="172" r="12" fill="#7dd3fc" filter="url(#glow)"/>
 </svg>
