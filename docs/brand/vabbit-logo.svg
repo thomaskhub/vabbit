@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 180" width="680" height="180" role="img" aria-label="Vabbit">
-<svg x="6" y="10" width="180" height="160.9" viewBox="20 20 940 840">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 180" width="720" height="180" role="img" aria-label="Vabbit">
+<svg x="4" y="26" width="230" height="138.0" viewBox="40 50 900 540">
   <defs>
-    <linearGradient id="teal" gradientUnits="userSpaceOnUse" x1="300" y1="250" x2="800" y2="800">
+    <linearGradient id="teal" gradientUnits="userSpaceOnUse" x1="300" y1="200" x2="800" y2="650">
       <stop offset="0" stop-color="#3fdca0"/><stop offset="1" stop-color="#14a38c"/>
     </linearGradient>
     <linearGradient id="ear" x1="0" y1="0" x2="1" y2="0.6">
@@ -13,7 +13,7 @@
     <linearGradient id="head" x1="0" y1="0" x2="0.6" y2="1">
       <stop offset="0" stop-color="#3fdca0"/><stop offset="1" stop-color="#19a990"/>
     </linearGradient>
-    <linearGradient id="chest" gradientUnits="userSpaceOnUse" x1="0" y1="450" x2="0" y2="700">
+    <linearGradient id="chest" gradientUnits="userSpaceOnUse" x1="0" y1="370" x2="0" y2="520">
       <stop offset="0" stop-color="#1d6fe0" stop-opacity="0"/><stop offset="0.5" stop-color="#1d6fe0" stop-opacity="0.7"/><stop offset="1" stop-color="#2563eb"/>
     </linearGradient>
     <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
@@ -25,40 +25,29 @@
     <filter id="glow" x="-40%" y="-60%" width="180%" height="220%">
       <feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <path id="bodyShape" d="M650 306 C 540 326, 400 348, 318 405 C 262 445, 242 510, 256 580 C 270 640, 320 698, 380 720 L 470 704 C 560 692, 650 652, 722 600 C 762 570, 762 540, 746 520 L 640 520 Z"/>
-    <path id="headShape" d="M640 300 C 700 284, 770 288, 802 300 C 852 330, 902 390, 936 446 C 912 470, 880 490, 846 500 C 780 512, 700 516, 640 520 C 608 470, 608 350, 640 300 Z"/>
+    <path id="bodyShape" d="M745 298 C 660 292, 560 290, 470 306 C 400 318, 344 346, 326 392 C 310 434, 332 476, 384 486 C 430 494, 470 482, 520 462 C 580 444, 640 440, 700 436 C 750 432, 784 410, 786 372 C 788 336, 772 306, 745 298 Z"/>
+    <path id="headShape" d="M720 300 C 760 270, 820 275, 860 300 C 885 318, 905 340, 922 360 C 900 378, 870 392, 840 398 C 800 404, 760 410, 725 412 Z"/>
     <clipPath id="bodyClip"><use href="#bodyShape"/><use href="#headShape"/></clipPath>
   </defs>
   <g id="rabbit" stroke-linejoin="round">
-    <!-- shield (behind the body) -->
-    <path d="M372 722 C 420 790, 462 822, 512 844 C 602 802, 692 722, 748 556" fill="none" stroke="url(#blue)" stroke-width="24"/>
-    <!-- circuit trace -->
-    <path d="M268 450 L268 322 L432 290" fill="none" stroke="#2fc79a" stroke-width="22"/>
-    <!-- tail -->
-    <circle cx="205" cy="486" r="46" fill="#1aa38a"/>
-    <!-- hind leg -->
-    <path d="M272 556 C 240 610, 200 650, 150 670 C 118 722, 80 782, 46 824 L 152 812 C 192 760, 252 722, 332 702 Z" fill="url(#teal)" stroke="#0b1f3a" stroke-width="8" paint-order="stroke"/>
-    <!-- body -->
-    <use href="#bodyShape" fill="url(#teal)" stroke="#0b1f3a" stroke-width="8" paint-order="stroke"/>
-    <!-- ears -->
-    <path d="M256 104 L 296 120 C 430 175, 570 245, 712 318 L 668 344 C 540 280, 410 215, 286 172 Z" fill="url(#earDark)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
-    <path d="M256 104 L 296 120 C 430 175, 570 245, 712 318 L 698 327 C 560 258, 420 190, 272 140 Z" fill="url(#ear)"/>
-    <path d="M352 34 L 384 62 C 520 140, 660 214, 794 292 L 750 318 C 622 240, 500 170, 368 112 Z" fill="url(#ear)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
-    <!-- head -->
+    <path d="M470 478 C 494 524, 524 552, 566 572 C 614 552, 650 512, 672 456" fill="none" stroke="url(#blue)" stroke-width="20"/>
+    <path d="M452 312 L452 262 L560 242" fill="none" stroke="#2fc79a" stroke-width="16"/>
+    <circle cx="322" cy="372" r="30" fill="#1aa38a"/>
+    <path d="M352 408 C 324 452, 292 488, 240 506 L 84 552 C 76 562, 80 572, 92 574 L 262 548 C 340 532, 420 504, 482 470 Z" fill="url(#teal)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
+    <use href="#bodyShape" fill="url(#teal)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
+    <path d="M330 120 L 362 130 C 480 180, 610 240, 740 300 L 712 316 C 590 262, 460 210, 348 162 Z" fill="url(#earDark)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
+    <path d="M330 120 L 362 130 C 480 180, 610 240, 740 300 L 728 307 C 600 248, 470 192, 342 146 Z" fill="url(#ear)"/>
+    <path d="M420 60 L 448 74 C 560 140, 680 220, 792 292 L 762 308 C 650 236, 540 160, 432 104 Z" fill="url(#ear)" stroke="#0b1f3a" stroke-width="6" paint-order="stroke"/>
     <use href="#headShape" fill="url(#teal)"/>
-    <path d="M770 386 C 792 390, 818 400, 840 416 C 814 420, 790 412, 770 386 Z" fill="#0b1f3a"/>
     <g clip-path="url(#bodyClip)">
-      <path d="M580 380 L 960 380 L 960 760 L 430 720 Z" fill="url(#chest)"/>
-      <path d="M292 428 C 248 510, 256 620, 340 712 L 376 708 C 304 626, 296 530, 330 440 Z" fill="#4be3a8" opacity="0.55"/>
-      <path d="M330 440 C 296 530, 304 626, 376 708" fill="none" stroke="#0b1f3a" stroke-width="6" opacity="0.8"/>
+      <path d="M600 300 L 960 300 L 960 560 L 520 520 Z" fill="url(#chest)"/>
+      <path d="M350 352 C 322 386, 318 446, 362 484 L 392 488 C 350 448, 350 396, 380 360 Z" fill="#4be3a8" opacity="0.55"/>
+      <path d="M380 360 C 350 396, 350 448, 392 488" fill="none" stroke="#0b1f3a" stroke-width="5" opacity="0.8"/>
     </g>
-    <!-- front legs -->
-    <path d="M712 640 C 790 650, 850 700, 880 766 L 842 762 C 810 722, 770 696, 712 682 Z" fill="url(#blue)"/>
-    <!-- toggle -->
-    <rect x="400" y="500" width="216" height="110" rx="55" fill="#0f2547" stroke="#38bdf8" stroke-width="14" filter="url(#glow)"/>
-    <circle cx="560" cy="555" r="40" fill="url(#knob)" filter="url(#glow)"/>
+    <path d="M818 326 C 834 330, 852 338, 866 348 C 846 351, 830 344, 818 326 Z" fill="#0b1f3a"/>
+    <path d="M720 430 C 790 436, 856 456, 918 490 L 906 504 C 850 480, 790 468, 724 462 Z" fill="url(#blue)"/>
   </g>
 </svg>
-<text x="206" y="104" font-family="Montserrat, Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="84" font-weight="700" letter-spacing="-1" fill="#0b1f3a">Vabbit</text>
-<text x="210" y="142" font-family="Montserrat, Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#0f766e">Sleek. Fast. Secure. The WireGuard rabbit.</text>
+<text x="250" y="104" font-family="Montserrat, Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="84" font-weight="700" letter-spacing="-1" fill="#0b1f3a">Vabbit</text>
+<text x="254" y="142" font-family="Montserrat, Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#0f766e">Sleek. Fast. Secure. The WireGuard rabbit.</text>
 </svg>
