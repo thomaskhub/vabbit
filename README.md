@@ -79,7 +79,7 @@ keep working.
 | `--allow-cidr-change` | `plan`/`apply`: allow changing a network's address range. Every device must re-enroll. |
 | `--yes` | `destroy`: don't ask for confirmation. |
 
-Settings live in `vabbit.toml` (see [docs/DEPLOY.md](docs/DEPLOY.md)); the Bunny API key
+Settings live in `vabbit.toml` (see [docs/DEPLOY.md](docs/DEPLOY.md), which also describes running the control plane on Cloudflare Workers with R2); the Bunny API key
 is read from the environment variable named by `api_key_env` (default `BUNNY_API_KEY`).
 
 ### `vabbit` admin commands
