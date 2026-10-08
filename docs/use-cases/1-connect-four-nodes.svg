@@ -33,10 +33,10 @@
   </g>
   <g transform="translate(30,275)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">3</text>
-    <text x="40" y="19" class="step">Node 1: make the cloud VM the hub</text>
+    <text x="40" y="19" class="step">Node 1: the cloud VM becomes the hub</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">sudo vabbit up --endpoint 203.0.113.10:51820 --hub</text>
-    <text x="40" y="78" font-size="13" class="m">Open UDP 51820 and TCP 443 on the VM. Log in as admin there first.</text>
+    <text x="52" y="50" class="code">vabbit devices set &lt;vm-id&gt; --hub=true</text>
+    <text x="40" y="78" font-size="13" class="m">Join it as in step 4, with VABBIT_ENDPOINT set. Open UDP 51820, TCP 443.</text>
   </g>
   <g transform="translate(30,370)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">4</text>
@@ -46,8 +46,8 @@
     <text x="52" y="72" class="code">vabbit keys create        <tspan class="m">→ vbk_7hY…2pQ</tspan></text>
     <text x="40" y="104" font-size="13" class="m">On the node:</text>
     <rect x="40" y="112" width="520" height="54" rx="6" class="codebox"/>
-    <text x="52" y="132" class="code">sudo VABBIT_SETUP_KEY=vbk_7hY…2pQ vabbit up \</text>
-    <text x="52" y="154" class="code">    --server https://home-net.b-cdn.net</text>
+    <text x="52" y="132" class="code">curl -fsSL …/install.sh | sudo VABBIT_SETUP_KEY=vbk_… \</text>
+    <text x="52" y="154" class="code">  VABBIT_SERVER=https://home-net.b-cdn.net sh</text>
     <text x="40" y="190" font-size="13" class="m">On your own laptop you're already admin, so it's just: <tspan class="code">sudo vabbit up</tspan></text>
   </g>
   <g transform="translate(30,580)">

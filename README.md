@@ -17,7 +17,9 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
 * Made for home labs, laptops and cloud VMs: a small cloud VM makes the ideal hub.
 * Tokens are 256-bit random values stored only as SHA-256 hashes.
 
-See [docs/USAGE.md](docs/USAGE.md) for a full walkthrough and [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
+Pictures of the common tasks: [connect four nodes](docs/use-cases/1-connect-four-nodes.svg),
+[remove a node](docs/use-cases/2-remove-a-node.svg), [change the admin token](docs/use-cases/3-change-admin-token.svg).
+How it works and the security model: [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Who runs what
 
@@ -82,12 +84,21 @@ is read from the environment variable named by `api_key_env` (default `BUNNY_API
 ### `vabbit` admin commands
 
 ```sh
-vabbit keys create                     # one-time setup key for a new device (valid 24h)
-vabbit keys create --reusable --ttl 7d --device-ttl 30d  # e.g. for a fleet of short-lived VMs
+vabbit keys create                         # one machine, key valid 24h
+vabbit keys create --reusable --max-uses 5 # up to 5 machines
+vabbit keys create --reusable --ttl never  # e.g. baked into VM images
+vabbit keys create --device-ttl 7d         # machines joined with it are cut off after 7 days
+vabbit keys rm <id>                        # no new machines can join with it
 vabbit devices ls
-vabbit devices set <id> --hub=true     # see "Setting up a hub"
-vabbit devices rm <id>                 # cut off on its next sync (≤15s)
+vabbit devices set <id> --expires 3d       # give a machine an end date (or: never)
+vabbit devices set <id> --hub=true         # see "Setting up a hub"
+vabbit devices rm <id>                     # cut off on its next sync (≤15s)
 ```
+
+Never put the admin token on other machines; hand out setup keys. A machine uses one
+once to join and then has its own device token. Deleting a key doesn't remove machines
+that already joined; remove those with `devices rm`. A removed or expired machine drops
+out of every peer list at once, and its own agent shuts its interface down.
 
 | Command | What it does |
 |---|---|

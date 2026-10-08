@@ -2,7 +2,8 @@
 
 Vabbit is a tiny WireGuard management plane. The control plane is a single
 Bunny.net Edge Script. **One deployed edge script is one network**: to run two
-isolated VPNs, deploy the script twice with different storage zones.
+isolated VPNs, add a second `[[network]]` to `vabbit.toml`, which deploys the
+script again with its own storage zone and admin token.
 
 The control plane never carries VPN traffic and never sees a WireGuard private
 key. It only hands out IP addresses and tells each device which public keys and
@@ -134,8 +135,8 @@ Notes:
   other traffic (e.g. `0.0.0.0/0`) into the VPN or inject config lines.
 * Client refuses plain `http://` servers except `localhost` (for development).
 * Client state file and admin file are written 0600, state dir 0700.
-* The client's only dependency is wireguard-go (pinned, plus golang.org/x
-  modules). Keys come from `crypto/ecdh`; on Linux it uses `ip` (iproute2) for
+* The client's dependencies are wireguard-go (pinned) and golang.org/x modules
+  (see [sbom/](../sbom/README.md)). Keys come from `crypto/ecdh`; on Linux it uses `ip` (iproute2) for
   the address. Candidate addresses from the server must be literal `IP:port`,
   so a hostile server can at most make the device send WireGuard handshakes
   to an address of its choosing.
