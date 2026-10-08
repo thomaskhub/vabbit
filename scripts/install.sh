@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the Vabbit client on Linux, and optionally join a network.
+# Install the Vabbit client on Linux or macOS, and optionally join a network.
 #
 #   curl -fsSL https://raw.githubusercontent.com/thomaskhub/vabbit/main/scripts/install.sh | sudo sh
 #
@@ -30,7 +30,11 @@ UNIT_DIR=/etc/systemd/system
 say() { printf 'vabbit: %s\n' "$*" >&2; }
 die() { say "error: $*"; exit 1; }
 
-[ "$(uname -s)" = Linux ] || die "the Vabbit client runs on Linux only for now"
+case "$(uname -s)" in
+  Linux) OS=linux ;;
+  Darwin) OS=darwin ;;
+  *) die "the Vabbit client runs on Linux, macOS and Windows (install.ps1)" ;;
+esac
 [ "$(id -u)" = 0 ] || die "run as root (pipe into: sudo sh)"
 case "$(uname -m)" in
   x86_64 | amd64) ARCH=amd64 ;;
@@ -38,9 +42,17 @@ case "$(uname -m)" in
   *) die "unsupported CPU $(uname -m); amd64 and arm64 are available" ;;
 esac
 command -v curl >/dev/null 2>&1 || die "curl is required"
-command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required (coreutils)"
-command -v ip >/dev/null 2>&1 || say "warning: 'ip' (iproute2) is missing; install it before running vabbit up"
-[ -c /dev/net/tun ] || say "warning: /dev/net/tun is missing; containers need it passed through"
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA256SUM=sha256sum
+elif command -v shasum >/dev/null 2>&1; then
+  SHA256SUM="shasum -a 256" # macOS
+else
+  die "sha256sum is required (coreutils)"
+fi
+if [ "$OS" = linux ]; then
+  command -v ip >/dev/null 2>&1 || say "warning: 'ip' (iproute2) is missing; install it before running vabbit up"
+  [ -c /dev/net/tun ] || say "warning: /dev/net/tun is missing; containers need it passed through"
+fi
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM
@@ -77,18 +89,27 @@ fetch() {
     die "could not download $1 (a private repository needs GITHUB_TOKEN)"
 }
 
-BIN=vabbit-linux-$ARCH
+BIN=vabbit-$OS-$ARCH
+if [ "$OS" = linux ]; then FILES="$BIN vabbit@.service"; else FILES=$BIN; fi
 say "downloading $BIN ($VERSION) from $REPO"
 fetch SHA256SUMS
-fetch "$BIN"
-fetch vabbit@.service
-(cd "$TMP" && grep -E " \*?($BIN|vabbit@\.service)\$" SHA256SUMS | sha256sum -c --quiet -) ||
-  die "checksum mismatch, nothing installed"
-[ "$(grep -cE " \*?($BIN|vabbit@\.service)\$" "$TMP/SHA256SUMS")" = 2 ] || die "SHA256SUMS does not list $BIN"
+for f in $FILES; do
+  fetch "$f"
+  line=$(grep -E "^[0-9a-f]{64} [ *]?$(printf '%s' "$f" | sed 's/[.@]/\\&/g')\$" "$TMP/SHA256SUMS" | head -n 1)
+  [ -n "$line" ] || die "SHA256SUMS does not list $f"
+  (cd "$TMP" && printf '%s\n' "$line" | $SHA256SUM -c - >/dev/null) || die "checksum mismatch for $f, nothing installed"
+done
 
+# A running macOS service holds the old binary: stop it during the upgrade.
+PLIST=/Library/LaunchDaemons/com.vabbit.$IFACE.plist
+if [ "$OS" = darwin ] && [ -f "$PLIST" ]; then
+  launchctl bootout "system/com.vabbit.$IFACE" 2>/dev/null || true
+  RESTART=1
+fi
+mkdir -p "$BIN_DIR"
 install -m 0755 "$TMP/$BIN" "$BIN_DIR/vabbit"
 say "installed $BIN_DIR/vabbit ($("$BIN_DIR/vabbit" version))"
-if [ -d /run/systemd/system ]; then
+if [ "$OS" = linux ] && [ -d /run/systemd/system ]; then
   install -m 0644 "$TMP/vabbit@.service" "$UNIT_DIR/vabbit@.service"
   systemctl daemon-reload
   say "installed the vabbit@.service unit"
@@ -100,14 +121,24 @@ if [ -n "${VABBIT_SETUP_KEY:-}" ] && [ -n "${VABBIT_SERVER:-}" ]; then
   [ -n "${VABBIT_ENDPOINT:-}" ] && set -- "$@" --endpoint "$VABBIT_ENDPOINT"
   say "joining $VABBIT_SERVER"
   VABBIT_SETUP_KEY=$VABBIT_SETUP_KEY "$BIN_DIR/vabbit" "$@" >/dev/null || die "enrolling failed"
-  if [ -d /run/systemd/system ]; then
+  if [ "$OS" = darwin ]; then
+    "$BIN_DIR/vabbit" service install --iface "$IFACE" >/dev/null || die "could not start the service"
+    say "joined; the tunnel runs as the launchd service com.vabbit.$IFACE. Check it with: sudo vabbit status"
+  elif [ -d /run/systemd/system ]; then
     systemctl enable --now "vabbit@$IFACE" >/dev/null 2>&1 || die "could not start vabbit@$IFACE"
     say "joined; the tunnel runs as vabbit@$IFACE. Check it with: sudo vabbit status"
   else
     say "joined; no systemd here, start the tunnel with: sudo vabbit up --iface $IFACE"
   fi
+elif [ -n "${RESTART:-}" ]; then
+  launchctl bootstrap system "$PLIST" || die "could not restart com.vabbit.$IFACE"
+  say "restarted com.vabbit.$IFACE"
 else
   say "done. Join a network with:"
   say "  sudo VABBIT_SETUP_KEY=vbk_... vabbit up --server https://mynet.b-cdn.net --dry-run"
-  say "  sudo systemctl enable --now vabbit@vb0"
+  if [ "$OS" = darwin ]; then
+    say "  sudo vabbit service install"
+  else
+    say "  sudo systemctl enable --now vabbit@vb0"
+  fi
 fi

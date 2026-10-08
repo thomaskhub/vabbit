@@ -1,0 +1,43 @@
+name: macos
+# macOS minutes cost ten times as much as Linux ones on a private repository: run by hand only
+# (Actions > macos > Run workflow, or the API), when the macOS client changed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    # Unit tests on macOS, then a real utun device run as a launchd service
+    # (scripts/macos-smoke.sh), installed with install.sh.
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+      - name: Unit tests
+        run: |
+          cd client && go vet ./...
+          # Failures as annotations: job logs are not readable from every place this repo is worked on.
+          if ! go test ./... > ../test.log 2>&1; then
+            cat ../test.log
+            grep -E -B2 -A12 -- '--- FAIL|^FAIL|panic:' ../test.log | head -60 | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}' | sed 's/^/::error title=macos unit tests::/'
+            echo
+            exit 1
+          fi
+          cat ../test.log
+      - name: Build the release files
+        run: |
+          mkdir -p out
+          arch=$(uname -m | sed 's/x86_64/amd64/')
+          (cd client && CGO_ENABLED=0 go build -trimpath -o ../out/vabbit-darwin-$arch ./cmd/vabbit)
+          (cd out && shasum -a 256 vabbit-darwin-$arch > SHA256SUMS)
+          (cd edge && bun install --frozen-lockfile)
+      - name: Smoke test (service, utun, route, status, hosts, leave)
+        run: ./scripts/macos-smoke.sh "$PWD/out"

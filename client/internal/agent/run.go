@@ -117,7 +117,7 @@ func Run(ctx context.Context, o Options) error {
 			var nat string
 			cands, stunCands, public, nat = gatherCandidates(ctx, dev, o.STUNServers, o.Device.ListenPort, netipCIDR(o.Device.NetworkCIDR))
 			planner.MyPublic = public
-			local := localAddrs(dev.Name, netipCIDR(o.Device.NetworkCIDR))
+			local := localAddrs(dev.IfName(), netipCIDR(o.Device.NetworkCIDR))
 			planner.HaveV4, planner.HaveV6 = familiesOf(local)
 			planner.LocalV6 = planner.LocalV6[:0]
 			for _, a := range local {
@@ -340,7 +340,7 @@ func orNone(s string) string {
 // different mapped ports within one family the NAT is "symmetric" and direct punching will usually
 // fail, leaving the hub as the path.
 func gatherCandidates(ctx context.Context, dev *wg.Device, servers []string, port int, vpn netip.Prefix) (cands []string, stunCands []netip.AddrPort, public netip.Addr, nat string) {
-	local := localAddrs(dev.Name, vpn)
+	local := localAddrs(dev.IfName(), vpn)
 	haveV4, haveV6 := familiesOf(local) // only ask over a family this host has an address for: no waiting on a dead one
 	mapped := queryMapped(ctx, servers, haveV4, haveV6, lookupIP, func(ctx context.Context, server netip.AddrPort) (netip.AddrPort, error) {
 		return dev.STUN(ctx, server, 1500*time.Millisecond)

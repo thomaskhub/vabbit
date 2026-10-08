@@ -54,7 +54,7 @@ Device (Linux as root, Windows as Administrator):
   vabbit down [--iface vb0]
   vabbit leave [--iface vb0]               remove this device from the network
   vabbit status [--iface vb0]
-  vabbit service install|uninstall [--iface vb0]   Windows: run the device as a service
+  vabbit service install|uninstall [--iface vb0]   macOS, Windows: run the device as a service
 
 The setup key can also be passed in VABBIT_SETUP_KEY to keep it out of the process list.
 Admin commands ask for the master password (or read VABBIT_ADMIN_PASSWORD); with several

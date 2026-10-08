@@ -20,12 +20,14 @@ const MTU = 1280
 
 // Device is a running userspace WireGuard interface.
 type Device struct {
-	Name string
-	dev  *device.Device
-	tun  tun.Device
-	bind *stunBind
-	uapi func()
-	mu   sync.Mutex
+	Name   string // the name vabbit uses (state, status, service)
+	ifname string // the operating system's name: the same, except utunN on macOS
+	dev    *device.Device
+	tun    tun.Device
+	bind   *stunBind
+	uapi   func()
+	mu     sync.Mutex
+	addr   netip.Prefix // the address SetAddress last set (macOS)
 }
 
 // Start creates the TUN interface and brings WireGuard up on it.
@@ -37,7 +39,11 @@ func Start(name, privateKey string, port int) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	t, err := tun.CreateTUN(name, MTU)
+	ifname := name
+	if runtime.GOOS == "darwin" {
+		ifname = "utun" // macOS only allows utunN; the kernel picks N
+	}
+	t, err := tun.CreateTUN(ifname, MTU)
 	if err != nil {
 		if runtime.GOOS == "windows" {
 			return nil, fmt.Errorf("creating Wintun adapter %s (wintun.dll must be next to vabbit.exe): %w", name, err)
@@ -45,11 +51,11 @@ func Start(name, privateKey string, port int) (*Device, error) {
 		return nil, fmt.Errorf("creating TUN device %s: %w", name, err)
 	}
 	if real, err := t.Name(); err == nil {
-		name = real
+		ifname = real
 	}
 	bind := newSTUNBind()
 	dev := device.NewDevice(t, bind, logger())
-	d := &Device{Name: name, dev: dev, tun: t, bind: bind}
+	d := &Device{Name: name, ifname: ifname, dev: dev, tun: t, bind: bind}
 	if err := dev.IpcSet(fmt.Sprintf("private_key=%s\nlisten_port=%d\n", priv, port)); err != nil {
 		dev.Close()
 		return nil, err
@@ -61,6 +67,9 @@ func Start(name, privateKey string, port int) (*Device, error) {
 	d.uapi = serveUAPI(name, dev) // lets `wg show` and `vabbit status` read it
 	return d, nil
 }
+
+// IfName is the operating system's name of the interface (utunN on macOS).
+func (d *Device) IfName() string { return d.ifname }
 
 func (d *Device) Close() {
 	if d.uapi != nil {

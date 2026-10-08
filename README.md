@@ -9,7 +9,7 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
 * The control plane (~400 lines of TypeScript) hands out IPs and peer lists. It never
   sees a WireGuard private key and never carries traffic.
 * The client is one static Go binary: an admin CLI and a device agent with embedded
-  WireGuard. Devices run Linux or Windows; the admin commands also run on macOS.
+  WireGuard. Devices run Linux, macOS or Windows.
 * NAT traversal: devices punch through NATs with STUN and connect directly; when that
   fails (symmetric NAT) traffic falls back to a relay "hub" automatically.
 * Works on hotel and guest Wi-Fi that blocks UDP: the device tunnels to the hub over
@@ -185,6 +185,13 @@ sudo cp packaging/vabbit@.service /etc/systemd/system/
 sudo systemctl enable --now vabbit@vb0                                               # keep it running
 ```
 
+**macOS** (Apple silicon or Intel): the same one-liner as on Linux. It installs `/usr/local/bin/vabbit`,
+enrolls, and runs the device as the launchd service `com.vabbit.vb0` (starts at boot, log in
+`/var/log/vabbit-vb0.log`). By hand: `sudo vabbit up --server URL --dry-run`, then
+`sudo vabbit service install` (and `sudo vabbit service uninstall`). The interface shows up as `utunN`;
+vabbit still calls it `vb0`. State lives in `/var/db/vabbit`. A Mac can't be a hub. If the macOS firewall
+is on with "Block all incoming connections", direct connections fail and traffic goes through the hub.
+
 **Windows** (10/11 or Server, amd64 or arm64): in PowerShell **as Administrator**:
 
 ```powershell
@@ -223,7 +230,7 @@ host names (letters, digits and hyphens) are skipped and logged. The packaged se
 | `vabbit status` | Show this device, its peers and how each is reached. |
 | `vabbit down` | Stop the tunnel; the device stays enrolled. |
 | `vabbit leave` | Remove this device from the network and delete its local state. |
-| `vabbit service install\|uninstall` | Windows: run this device as a service (`--iface`, default `vb0`). |
+| `vabbit service install\|uninstall` | macOS, Windows: run this device as a service (`--iface`, default `vb0`). |
 | `vabbit version` | Print the version. |
 
 **`vabbit up`**
@@ -327,7 +334,7 @@ sudo vabbit up --dry-run                 # syncs once and prints the peers inste
 ```
 
 To publish a release, push a tag such as `v0.1.0` (or run the workflow by hand with that tag): [release.yml](.github/workflows/release.yml)
-builds `vabbit` (Linux and macOS, amd64/arm64), the systemd unit, `install.sh` and `SHA256SUMS`, and attaches them to a GitHub release.
+builds `vabbit` (Linux, macOS and Windows, amd64/arm64), the systemd unit, `install.sh`, `install.ps1`, Wintun and `SHA256SUMS`, and attaches them to a GitHub release.
 
 ## Dependencies
 

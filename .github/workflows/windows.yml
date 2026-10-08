@@ -1,0 +1,62 @@
+name: windows
+# Windows minutes cost double, so this only runs when something the Windows client uses changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - client/**
+      - edge/src/**
+      - scripts/install.ps1
+      - scripts/windows-smoke.ps1
+      - scripts/fetch_wintun.py
+      - .github/workflows/windows.yml
+  pull_request:
+    paths:
+      - client/**
+      - edge/src/**
+      - scripts/install.ps1
+      - scripts/windows-smoke.ps1
+      - scripts/fetch_wintun.py
+      - .github/workflows/windows.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    # Unit tests on Windows, then a real Wintun adapter run as a Windows service
+    # (scripts/windows-smoke.ps1), installed with install.ps1.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+      - name: Unit tests
+        shell: bash
+        run: |
+          cd client && go vet ./...
+          # Failures as annotations: job logs are not readable from every place this repo is worked on.
+          if ! go test ./... > ../test.log 2>&1; then
+            cat ../test.log
+            grep -E -B2 -A12 -- '--- FAIL|^FAIL|panic:' ../test.log | head -60 | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}' | sed 's/^/::error title=windows unit tests::/'
+            echo
+            exit 1
+          fi
+          cat ../test.log
+      - name: Build and collect the release files
+        shell: bash
+        run: |
+          mkdir -p out
+          (cd client && CGO_ENABLED=0 go build -trimpath -o ../out/vabbit-windows-amd64.exe ./cmd/vabbit)
+          python scripts/fetch_wintun.py out
+          (cd out && sha256sum vabbit-windows-amd64.exe wintun-amd64.dll > SHA256SUMS)
+          (cd edge && bun install --frozen-lockfile)
+      - name: Smoke test (service, adapter, status, firewall, hosts, leave)
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows-smoke.ps1 -Assets "%CD%\out"

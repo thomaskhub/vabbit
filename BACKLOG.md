@@ -38,8 +38,9 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
 - [ ] **Windows client: test on a real machine.** Built on 2026-10-08 (Wintun adapter, Windows
       service `vabbit-<iface>`, firewall rules, `install.ps1`); CI runs `scripts/windows-smoke.ps1`
       on a Windows runner. Not yet tried by a person, and a Windows device can't be a hub.
-- [ ] **macOS client.** Needs `client/internal/wg/netcfg_darwin.go` (utun, `ifconfig`, `route`)
-      and a launchd service; the admin commands already run on macOS.
+- [ ] **macOS client: test on a real Mac.** Built on 2026-10-08 (utun, `ifconfig`/`route`, launchd
+      service `com.vabbit.<iface>`, `install.sh`). `scripts/macos-smoke.sh` runs only by hand
+      (workflow `macos`), because macOS CI minutes cost 10x; run it sparingly.
 - [ ] IPv6 VPN addresses (IPv6 endpoint candidates are done, PR #2).
 - [ ] A DNS server for device names. Today names are written to `/etc/hosts` as `<name>.vabbit`
       (PR #4); existing installs need the new `vabbit@.service` for that.

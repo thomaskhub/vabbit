@@ -87,6 +87,14 @@ Windows: `irm …/scripts/install.ps1 | iex` as Administrator (same env vars) in
 Administrators via `internal/secfile`). Platform code: `client/internal/wg/netcfg_windows.go`,
 `client/cmd/vabbit/platform_windows.go`. CI job `windows` runs `scripts/windows-smoke.ps1`.
 
+macOS: the same `install.sh` installs `/usr/local/bin/vabbit` and runs `vabbit service install`
+(launchd `com.vabbit.<iface>`, plist in `/Library/LaunchDaemons`, log `/var/log/vabbit-<iface>.log`,
+state in `/var/db/vabbit`). The interface is `utunN` (`Device.IfName()`); vabbit's own name (`vb0`)
+names the control socket `/var/run/wireguard/vb0.sock`. Code: `client/internal/wg/netcfg_darwin.go`,
+`client/cmd/vabbit/platform_darwin.go`. **CI minutes:** the owner has 2,000 a month; macOS costs 10x,
+Windows 2x. So `macos.yml` is manual only (dispatch it once per real macOS change), and
+`windows.yml` only runs when client code or Windows scripts change.
+
 Releases: pushing a `v*` tag runs `.github/workflows/release.yml` (client linux
 and darwin amd64/arm64 with `-X main.version`, unit file, install.sh,
 SHA256SUMS, `gh release create --generate-notes`). Tags with a suffix (`-rc.1`) become
@@ -143,6 +151,7 @@ cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :878
 | Admin decides hubs, can change any time; "hub key" idea rejected | Hubs see relayed traffic, so only the admin promotes them |
 | Several hubs with automatic failover | Owner wanted a backup hub |
 | One-line installer from GitHub raw + tagged releases | Easy client setup |
+| macOS devices: utun + launchd, hubs stay Linux-only; macOS CI by hand only | Owner pays for CI minutes and macOS runners cost 10x |
 | Windows devices: Wintun + a Windows service, hubs stay Linux-only | Owner can test Windows; forwarding/NAT on Windows is a different world, so hubs are not ported |
 | `vabbit-deploy` merged into `vabbit` as `vabbit deploy` | One program to install and explain; gives Mac admins a `vabbit` build. Deploy code on devices is harmless: it needs the Bunny API key |
 

@@ -27,7 +27,7 @@ type Device struct {
 	Domain string `json:"domain,omitempty"`
 }
 
-// DefaultDir is /var/lib/vabbit, or %ProgramData%\vabbit on Windows.
+// DefaultDir is /var/lib/vabbit, /var/db/vabbit on macOS, or %ProgramData%\vabbit on Windows.
 var DefaultDir = defaultDir()
 
 func defaultDir() string {
@@ -36,6 +36,9 @@ func defaultDir() string {
 			return filepath.Join(pd, "vabbit")
 		}
 		return `C:\ProgramData\vabbit`
+	}
+	if runtime.GOOS == "darwin" {
+		return "/var/db/vabbit"
 	}
 	return "/var/lib/vabbit"
 }

@@ -1,4 +1,4 @@
-//go:build !linux && !windows
+//go:build !linux && !windows && !darwin
 
 package wg
 
@@ -10,8 +10,7 @@ import (
 	"golang.zx2c4.com/wireguard/device"
 )
 
-// TODO(macos): configure addresses and routes natively.
-var errUnsupported = errors.New("running a device is not supported on this platform yet (Linux and Windows only)")
+var errUnsupported = errors.New("running a device is not supported on this platform yet (Linux, macOS and Windows only)")
 
 var ifaceRE = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,15}$`)
 
