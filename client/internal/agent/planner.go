@@ -53,9 +53,13 @@ type peerState struct {
 type Planner struct {
 	MyPublic netip.Addr // our STUN-mapped address, if known
 	peers    map[string]*peerState
+	kick     map[string]bool
 }
 
-func NewPlanner() *Planner { return &Planner{peers: map[string]*peerState{}} }
+func NewPlanner() *Planner { return &Planner{peers: map[string]*peerState{}, kick: map[string]bool{}} }
+
+// Kick makes the next plan force a handshake towards the peer.
+func (p *Planner) Kick(key string) { p.kick[key] = true }
 
 func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map[string]wg.PeerStat) ([]wg.PeerConfig, map[string]Path) {
 	// Only one hub can own the network route; pick the first, like the server orders them.
@@ -77,6 +81,11 @@ func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map
 		live[key] = true
 		st := p.peers[key]
 		cands := p.order(peer.Candidates)
+		if peer.Hub && len(cands) > 1 {
+			// A hub is public by definition: dial its static endpoint only (its
+			// other candidates are typically a cloud VM's private address).
+			cands = cands[:1]
+		}
 		if st == nil || !slices.Equal(st.cands, cands) {
 			st = &peerState{cands: cands}
 			p.peers[key] = st
@@ -113,6 +122,10 @@ func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map
 			st.setAt = now
 			cfg.Endpoint = st.current
 			cfg.Kick = true
+		}
+		if p.kick[key] {
+			cfg.Kick = true
+			delete(p.kick, key)
 		}
 		cfgs = append(cfgs, cfg)
 	}

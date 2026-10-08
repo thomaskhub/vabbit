@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -28,6 +29,7 @@ type Peer struct {
 	IP        netip.Addr
 	Hub       bool
 	Endpoints []string // host:port, best first; may contain DNS names (static endpoints)
+	Relay     *api.Relay
 }
 
 // Validate checks everything the control plane sent before it is used. The
@@ -67,10 +69,19 @@ func Validate(s api.SyncResponse, pinnedCIDR, selfPublicKey string) (Network, er
 				return Network{}, err
 			}
 		}
-		n.Peers = append(n.Peers, Peer{Name: sanitizeName(p.Name), PublicKey: p.PublicKey, IP: ip, Hub: p.Hub, Endpoints: p.Endpoints})
+		var rel *api.Relay
+		if p.Relay != nil && p.Hub {
+			if ValidateEndpoint(p.Relay.Addr) != nil || !fingerprintRE.MatchString(p.Relay.Fingerprint) {
+				return Network{}, fmt.Errorf("invalid relay for peer %s", p.PublicKey)
+			}
+			rel = p.Relay
+		}
+		n.Peers = append(n.Peers, Peer{Name: sanitizeName(p.Name), PublicKey: p.PublicKey, IP: ip, Hub: p.Hub, Endpoints: p.Endpoints, Relay: rel})
 	}
 	return n, nil
 }
+
+var fingerprintRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func sanitizeName(s string) string {
 	s = strings.Map(func(r rune) rune {

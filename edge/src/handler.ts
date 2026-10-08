@@ -21,6 +21,8 @@ export interface Device {
   endpoint: string | null;
   /** NAT traversal candidates the device reported: STUN-mapped and LAN addresses. */
   candidates?: string[];
+  /** TLS-over-TCP relay a hub offers to devices on networks that block UDP. */
+  relay?: Relay | null;
   hub: boolean;
   tokenHash: string;
   createdAt: number;
@@ -37,6 +39,12 @@ export interface SetupKey {
   createdAt: number;
 }
 
+export interface Relay {
+  addr: string;
+  /** Hex SHA-256 of the relay's self-signed certificate, pinned by clients. */
+  fingerprint: string;
+}
+
 export interface Peer {
   name: string;
   publicKey: string;
@@ -44,6 +52,7 @@ export interface Peer {
   hub: boolean;
   /** Addresses to try, best first: static endpoint, then reported candidates. */
   endpoints: string[];
+  relay?: Relay;
 }
 
 const MAX_BODY = 8 * 1024;
@@ -301,14 +310,17 @@ class Api {
     const endpoint = optEndpoint(body.endpoint);
     // Omitted candidates (status checks, one-off calls) keep the stored ones.
     const candidates = body.candidates === undefined ? (self.candidates ?? []) : optCandidates(body.candidates);
+    const relay = body.relay === undefined ? (self.relay ?? null) : optRelay(body.relay);
     const t = this.now();
     if (
       endpoint !== self.endpoint ||
       candidates.join() !== (self.candidates ?? []).join() ||
+      JSON.stringify(relay) !== JSON.stringify(self.relay ?? null) ||
       t - self.lastSeen > LAST_SEEN_WRITE_MS
     ) {
       self.endpoint = endpoint;
       self.candidates = candidates;
+      self.relay = relay;
       // Losing the endpoint means peers can no longer dial it as a hub.
       if (!endpoint) self.hub = false;
       self.lastSeen = t;
@@ -340,6 +352,8 @@ export function computePeers(self: Device, devices: Device[]): Peer[] {
       endpoints: [...(d.endpoint ? [d.endpoint] : []), ...(d.candidates ?? [])].filter(
         (e, i, all) => all.indexOf(e) === i,
       ),
+      // Only an admin-promoted hub's relay is ever handed out.
+      ...(d.hub && d.endpoint !== null && d.relay ? { relay: d.relay } : {}),
     }));
 }
 
@@ -423,6 +437,18 @@ function optInt(v: unknown, field: string, min: number, max: number): number | u
     throw new HttpError(400, `${field} must be an integer between ${min} and ${max}`);
   }
   return v;
+}
+
+function optRelay(v: unknown): Relay | null {
+  if (v === null) return null;
+  if (typeof v !== "object" || Array.isArray(v)) throw new HttpError(400, "relay must be an object");
+  const r = v as Record<string, unknown>;
+  const addr = optEndpoint(r.addr);
+  if (!addr) throw new HttpError(400, "relay.addr must be host:port");
+  if (typeof r.fingerprint !== "string" || !/^[0-9a-f]{64}$/.test(r.fingerprint)) {
+    throw new HttpError(400, "relay.fingerprint must be 64 hex characters");
+  }
+  return { addr, fingerprint: r.fingerprint };
 }
 
 /** Candidates must be literal IP:port (no DNS names), deduplicated, at most 8. */

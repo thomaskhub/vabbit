@@ -6,10 +6,14 @@
 #                               +-- internet --+-- STUN 9.9.9.9 / 9.9.9.10
 #   phone (192.168.1.3) - natB -+                +-- control plane 9.9.9.20
 #
-# Both laptops sit behind their own NAT router. Run with "cone" (Linux
-# MASQUERADE keeps ports, like most home routers: hole punching must give a
-# direct path) or "symmetric" (random ports per destination: punching fails
-# and traffic must fall back to the hub). Default: both.
+# Both laptops sit behind their own NAT router. Modes:
+#   cone       Linux MASQUERADE keeps ports, like most home routers: hole
+#              punching must give a direct path.
+#   symmetric  random ports per destination: punching fails and traffic must
+#              fall back to the hub.
+#   hotel      lap's network drops all UDP: lap must tunnel to the hub over
+#              TLS on TCP 443 on its own.
+# Default: all three.
 #
 # Needs root, iproute2, iptables, ping, openssl, bun and go.
 set -euo pipefail
@@ -65,6 +69,7 @@ setup() { # nat mode: cone | symmetric
     x $n iptables -A INPUT -i wan -m conntrack --ctstate NEW,INVALID -j DROP
     x $n iptables -A FORWARD -i wan -m conntrack --ctstate NEW,INVALID -j DROP
   done
+  if [ "$1" = hotel ]; then x natA iptables -I FORWARD -i lan -p udp -j DROP; fi
 
   x inet "$W/stunserver" -listen 9.9.9.9:3478 >/dev/null 2>&1 & PIDS+=($!)
   x inet "$W/stunserver" -listen 9.9.9.10:3478 >/dev/null 2>&1 & PIDS+=($!)
@@ -121,13 +126,20 @@ run() {
   for n in lap phone; do EDGEGUARD_SETUP_KEY=$(x hub "$EG" keys create 2>/dev/null) agent "$n"; done
 
   local want=direct
-  [ "$mode" = symmetric ] && want=relay
+  [ "$mode" != cone ] && want=relay
   wait_for lap "peer phone: $want" 40
   wait_for phone "peer lap: $want" 40
+  [ "$mode" != hotel ] && wait_for lap "peer hub: direct" 30
+  wait_for phone "peer hub: direct" 30
   if [ "$mode" = symmetric ]; then check "symmetric NAT detected" grep -q "NAT: symmetric" "$W/lap.log"; fi
+  if [ "$mode" = hotel ]; then
+    wait_for lap "tunnelling over TCP" 30
+    echo "ok   lap switched to TCP 443"
+    check "status shows the TCP relay" status_has lap "To hub" "TCP relay"
+  fi
 
-  check "lap -> phone ($want)" x lap ping -c4 -W2 "$(ipof phone)"
-  check "phone -> lap ($want)" x phone ping -c4 -W2 "$(ipof lap)"
+  check "lap -> phone ($want)" x lap ping -c6 -W2 "$(ipof phone)"
+  check "phone -> lap ($want)" x phone ping -c6 -W2 "$(ipof lap)"
   check "lap -> hub" x lap ping -c2 -W2 "$(ipof hub)"
   status lap
 
@@ -152,6 +164,6 @@ run() {
 }
 
 modes=("$@")
-[ ${#modes[@]} -eq 0 ] && modes=(cone symmetric)
+[ ${#modes[@]} -eq 0 ] && modes=(cone symmetric hotel)
 for m in "${modes[@]}"; do run "$m"; done
 echo PASS

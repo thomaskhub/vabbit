@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"edgeguard/internal/api"
+	"edgeguard/internal/relay"
 	"edgeguard/internal/state"
 	"edgeguard/internal/wg"
 )
@@ -27,7 +29,10 @@ type Options struct {
 	Client       *api.Client
 	STUNServers  []string
 	SyncInterval time.Duration
-	Logf         func(format string, args ...any)
+	// TCPRelay is the address a hub serves its TLS relay on (e.g. ":443"),
+	// for devices on networks that block UDP. Empty disables it.
+	TCPRelay string
+	Logf     func(format string, args ...any)
 }
 
 const tick = 2 * time.Second
@@ -43,6 +48,8 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	defer dev.Close()
+	writeTransport(dev.Name, "UDP")
+	defer os.Remove(TransportFile(dev.Name))
 
 	planner := NewPlanner()
 	var (
@@ -57,7 +64,16 @@ func Run(ctx context.Context, o Options) error {
 		lastCands  string
 		staticEP   = o.Device.Endpoint
 		peerByName = map[string]string{}
+		udpWorks   bool
+		trans      transport
+		relaySrv   *relay.Server
+		relayInfo  *api.Relay
 	)
+	defer func() {
+		if relaySrv != nil {
+			relaySrv.Close()
+		}
+	}()
 	t := time.NewTicker(tick)
 	defer t.Stop()
 	for {
@@ -69,6 +85,7 @@ func Run(ctx context.Context, o Options) error {
 			lastSync = time.Now()
 			cands, public, nat := gatherCandidates(ctx, dev, o.STUNServers, o.Device.ListenPort, netipCIDR(o.Device.NetworkCIDR))
 			planner.MyPublic = public
+			udpWorks = public.IsValid()
 			if cands == nil {
 				cands = []string{}
 			}
@@ -76,7 +93,7 @@ func Run(ctx context.Context, o Options) error {
 				lastCands = c
 				o.Logf("candidates: %s (NAT: %s)", orNone(c), nat)
 			}
-			s, err := o.Client.Sync(ctx, staticEP, cands)
+			s, err := o.Client.Sync(ctx, staticEP, cands, relayInfo)
 			switch {
 			case errors.Is(err, api.ErrUnauthorized):
 				return ErrRemoved
@@ -106,6 +123,21 @@ func Run(ctx context.Context, o Options) error {
 					o.Logf("interface %s up with %s (hub: %v)", dev.Name, n.Address, n.SelfHub)
 					lastAddr, lastHub = n.Address, n.SelfHub
 				}
+				switch {
+				case n.SelfHub && relaySrv == nil && o.TCPRelay != "" && staticEP != "":
+					srv, info, err := startRelay(o.TCPRelay, staticEP, o.Device.ListenPort)
+					if err != nil {
+						o.Logf("TCP relay not started (%v); devices on UDP-blocked networks can't reach this hub", err)
+						o.TCPRelay = "" // don't retry every sync
+						break
+					}
+					relaySrv, relayInfo = srv, info
+					lastSync = time.Time{} // publish it right away
+					o.Logf("TCP relay for UDP-blocked networks on %s", info.Addr)
+				case !n.SelfHub && relaySrv != nil:
+					relaySrv.Close()
+					relaySrv, relayInfo = nil, nil
+				}
 			}
 		}
 
@@ -114,7 +146,33 @@ func Run(ctx context.Context, o Options) error {
 			if err != nil {
 				return err
 			}
-			cfgs, paths := planner.Plan(time.Now(), netw, resolved, stats)
+			now := time.Now()
+			if !netw.SelfHub {
+				hub := hubPeer(resolved)
+				var hubStat wg.PeerStat
+				hasRelay := hub != nil && hub.Relay != nil && len(hub.Candidates) > 0
+				if hub != nil {
+					hubStat = stats[hub.PublicKey]
+				}
+				if trans.step(now, hasRelay, hubStat, udpWorks) {
+					trans.toggle(now)
+					if trans.tcp {
+						if err := dev.UseTCPRelay(hub.Candidates[0], hub.Relay.Addr, hub.Relay.Fingerprint); err != nil {
+							return err
+						}
+						o.Logf("no UDP from the hub; tunnelling over TCP to %s", hub.Relay.Addr)
+						writeTransport(dev.Name, "TCP relay "+hub.Relay.Addr+" (UDP blocked)")
+					} else {
+						dev.UseUDP()
+						o.Logf("using UDP to the hub")
+						writeTransport(dev.Name, "UDP")
+					}
+					if hub != nil {
+						planner.Kick(hub.PublicKey)
+					}
+				}
+			}
+			cfgs, paths := planner.Plan(now, netw, resolved, stats)
 			if err := dev.Configure(cfgs); err != nil {
 				return fmt.Errorf("configuring peers: %w", err)
 			}
@@ -140,6 +198,35 @@ func Run(ctx context.Context, o Options) error {
 		case <-t.C:
 		}
 	}
+}
+
+// TransportFile records how this device reaches the hub, for `edgeguard status`.
+func TransportFile(iface string) string { return "/var/run/wireguard/" + iface + ".transport" }
+
+func writeTransport(iface, s string) { _ = os.WriteFile(TransportFile(iface), []byte(s+"\n"), 0o600) }
+
+func hubPeer(peers []ResolvedPeer) *ResolvedPeer {
+	for i := range peers {
+		if peers[i].Hub {
+			return &peers[i]
+		}
+	}
+	return nil
+}
+
+// startRelay serves the TLS relay and describes it for the control plane:
+// the hub's public host with the relay's port.
+func startRelay(listen, staticEP string, wgPort int) (*relay.Server, *api.Relay, error) {
+	host, _, err := net.SplitHostPort(staticEP)
+	if err != nil {
+		return nil, nil, err
+	}
+	srv, err := relay.Listen(listen, wgPort)
+	if err != nil {
+		return nil, nil, err
+	}
+	_, port, _ := net.SplitHostPort(srv.Addr().String())
+	return srv, &api.Relay{Addr: net.JoinHostPort(host, port), Fingerprint: srv.Fingerprint}, nil
 }
 
 func netipCIDR(s string) netip.Prefix {

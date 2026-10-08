@@ -81,16 +81,30 @@ and devices do the punching themselves.
 5. **No hub?** Then every peer keeps its `/32` and works only where a direct
    path can be punched.
 
+6. **UDP blocked (hotels, guest Wi-Fi).** A hub also serves a relay on TCP 443:
+   TLS 1.3 carrying length-prefixed WireGuard packets, forwarded to its own
+   WireGuard port. Its certificate is self-signed; the hub publishes the
+   SHA-256 fingerprint through the control plane and clients pin it (only an
+   admin-promoted hub's relay is ever handed out). The client watches bytes
+   received from the hub: if nothing arrives for 12s (or 40s once traffic has
+   flowed), it diverts packets for the hub's endpoint into the TLS tunnel and
+   feeds replies back as if they came over UDP, so WireGuard sessions survive
+   the switch in both directions. On TCP it tries UDP again every 5 minutes if
+   STUN shows UDP works (left the hotel). Peers other than the hub are reached
+   through the hub meanwhile. Nothing changes network-wide; each device decides
+   for itself. The control plane is already HTTPS, so it keeps working.
+
 `scripts/e2e-nat.sh` tests this with real tunnels: two laptops behind separate
 emulated home routers (MASQUERADE plus an inbound firewall) connect directly;
-with port-randomising ("symmetric") NATs they fall back to the hub.
+with port-randomising ("symmetric") NATs they fall back to the hub; with all
+UDP dropped ("hotel") the laptop switches to TCP 443 and still reaches everyone.
 
 ## Storage
 
 Bunny Storage HTTP API (`AccessKey` header), objects:
 
 ```
-devices/<id>.json        {id, name, publicKey, ip, endpoint, candidates, hub, tokenHash, createdAt, lastSeen}
+devices/<id>.json        {id, name, publicKey, ip, endpoint, candidates, relay, hub, tokenHash, createdAt, lastSeen}
 setup-keys/<sha256>.json {id, hash, reusable, maxUses, uses, expiresAt, createdAt}
 ```
 

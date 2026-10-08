@@ -336,6 +336,7 @@ func cmdUp(ctx context.Context, args []string) error {
 	port := fs.Int("port", 0, "WireGuard listen port (default 51820)")
 	interval := fs.Duration("interval", 15*time.Second, "how often to sync with the control plane")
 	stunFlag := fs.String("stun", "", "comma-separated STUN servers host:port, or \"none\" (default Cloudflare and Google)")
+	tcpRelay := fs.String("tcp-relay", ":443", "hubs only: where to serve the TLS relay for devices on UDP-blocked networks (\"off\" to disable)")
 	dryRun := fs.Bool("dry-run", false, "enroll/sync once and print the peers instead of starting the interface")
 	fs.Parse(args)
 
@@ -419,6 +420,7 @@ func cmdUp(ctx context.Context, args []string) error {
 		Client:       c,
 		STUNServers:  stunServers,
 		SyncInterval: *interval,
+		TCPRelay:     relayListen(*tcpRelay),
 		Logf:         func(f string, a ...any) { log.Printf(f, a...) },
 	})
 	if errors.Is(err, agent.ErrRemoved) {
@@ -431,6 +433,13 @@ func cmdUp(ctx context.Context, args []string) error {
 	return err
 }
 
+func relayListen(v string) string {
+	if v == "off" {
+		return ""
+	}
+	return v
+}
+
 // setHub promotes or demotes this device. Only the admin may do that, so it
 // uses the admin login on this machine.
 func setHub(ctx context.Context, c *api.Client, dev state.Device, hub bool) error {
@@ -439,7 +448,7 @@ func setHub(ctx context.Context, c *api.Client, dev state.Device, hub bool) erro
 	}
 	if hub {
 		// The server only accepts a hub that has an endpoint on record.
-		if _, err := c.Sync(ctx, dev.Endpoint, nil); err != nil {
+		if _, err := c.Sync(ctx, dev.Endpoint, nil, nil); err != nil {
 			return err
 		}
 	}
@@ -523,7 +532,7 @@ func dryRunSync(ctx context.Context, c *api.Client, dev state.Device) error {
 	if err != nil {
 		return err
 	}
-	s, err := c.Sync(ctx, dev.Endpoint, nil)
+	s, err := c.Sync(ctx, dev.Endpoint, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -601,7 +610,7 @@ func cmdStatus(ctx context.Context, args []string) error {
 		return err
 	}
 	pub, _ := wg.PublicKey(dev.PrivateKey)
-	s, err := c.Sync(ctx, dev.Endpoint, nil)
+	s, err := c.Sync(ctx, dev.Endpoint, nil, nil)
 	if err != nil {
 		fmt.Println("Control plane:", err)
 		return nil
@@ -610,7 +619,11 @@ func cmdStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Hub      %v\n\nPEERS\n", n.SelfHub)
+	fmt.Printf("Hub      %v\n", n.SelfHub)
+	if t, err := os.ReadFile(agent.TransportFile(*df.iface)); err == nil && !n.SelfHub {
+		fmt.Printf("To hub   %s", t)
+	}
+	fmt.Print("\nPEERS\n")
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tIP\tPATH\tENDPOINT\tHANDSHAKE")
 	for _, p := range n.Peers {

@@ -10,6 +10,9 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
   WireGuard. Linux today; macOS and Windows are next.
 * NAT traversal: devices punch through NATs with STUN and connect directly; when that
   fails (symmetric NAT) traffic falls back to a relay "hub" automatically.
+* Works on hotel and guest Wi-Fi that blocks UDP: the device tunnels to the hub over
+  TLS on TCP 443 by itself, and goes back to UDP when it can.
+* Made for home labs, laptops and cloud VMs: a small cloud VM makes the ideal hub.
 * Tokens are 256-bit random values stored only as SHA-256 hashes.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
@@ -43,10 +46,11 @@ See [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
 ```sh
 edgeguard login --server https://mynet.b-cdn.net      # prompts for the ega_ token
 
-# Optional but recommended: a machine with a public IP that relays when a direct
-# path can't be punched. Only the admin can make a hub (it sees relayed traffic),
-# so do this where you're logged in:
-sudo edgeguard up --endpoint 203.0.113.10:51820 --hub
+# Recommended: a machine with a public IP (e.g. a small cloud VM) that relays when a
+# direct path can't be punched or UDP is blocked. Open UDP 51820 and TCP 443 in its
+# firewall. Only the admin can make a hub (it sees relayed traffic), so do this
+# where you're logged in:
+sudo edgeguard up --endpoint 203.0.113.10:51820 --hub     # --tcp-relay off to skip TCP 443
 
 # Any other machine where you're not logged in as admin:
 edgeguard keys create                                 # prints a one-time egk_ key (24h)
@@ -87,13 +91,15 @@ tv     100.92.239.109  relay via hub  198.51.100.4:17577  never
 
 When both sides are behind port-randomising (symmetric) NATs, punching can't work and
 traffic goes through the hub; the agent keeps trying and switches to direct when it can.
-Without a hub, such pairs can't connect. Details in [docs/DESIGN.md](docs/DESIGN.md).
+On networks that block UDP entirely, the device notices within seconds and tunnels to
+the hub over TCP 443 (`status` shows `To hub   TCP relay …`). Without a hub, neither
+fallback exists. Details in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Development
 
 ```sh
 make test                                   # edge (bun test) + client (go test)
-sudo ./scripts/e2e-nat.sh                   # real tunnels through emulated home NATs
+sudo ./scripts/e2e-nat.sh                   # real tunnels: home NATs, symmetric NATs, UDP-blocked hotel
 cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :8787, in memory
 edgeguard login --server http://127.0.0.1:8787 --token ega_...
 sudo edgeguard up --dry-run                 # syncs once and prints the peers instead of starting

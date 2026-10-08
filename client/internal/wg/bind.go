@@ -14,10 +14,15 @@ import (
 // stunBind wraps wireguard-go's UDP bind so STUN Binding requests go out of,
 // and responses come back to, the very socket WireGuard uses. The mapping a
 // NAT creates for that socket is what peers must dial to punch through.
+//
+// It can also divert all traffic for one endpoint (the hub) into a TLS/TCP
+// tunnel when the network blocks UDP; see tcp.go.
 type stunBind struct {
 	conn.Bind
 	mu      sync.Mutex
 	pending map[stun.TxID]chan netip.AddrPort
+
+	tcp tcpTunnel
 }
 
 func newSTUNBind() *stunBind {
@@ -29,11 +34,24 @@ func (b *stunBind) Open(port uint16) ([]conn.ReceiveFunc, uint16, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	wrapped := make([]conn.ReceiveFunc, len(fns))
+	wrapped := make([]conn.ReceiveFunc, len(fns), len(fns)+1)
 	for i, fn := range fns {
 		wrapped[i] = b.filter(fn)
 	}
+	wrapped = append(wrapped, b.tcp.open())
 	return wrapped, actual, nil
+}
+
+func (b *stunBind) Close() error {
+	b.tcp.close()
+	return b.Bind.Close()
+}
+
+func (b *stunBind) Send(bufs [][]byte, ep conn.Endpoint) error {
+	if b.tcp.intercepts(ep) {
+		return b.tcp.send(bufs)
+	}
+	return b.Bind.Send(bufs, ep)
 }
 
 // filter removes STUN packets from a receive batch and hands them to waiting

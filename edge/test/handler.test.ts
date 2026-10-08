@@ -150,6 +150,22 @@ describe("devices and sync", () => {
     expect((await call("GET", "/api/v1/devices", undefined, ADMIN)).body.devices).toEqual([]);
   });
 
+  test("only a hub's TCP relay is published", async () => {
+    const { call } = await setup();
+    const fp = "ab".repeat(32);
+    const h = await enroll(call, "h", KEY1, { endpoint: "203.0.113.1:51820" });
+    const a = await enroll(call, "a", KEY2);
+    const relay = { addr: "203.0.113.1:443", fingerprint: fp };
+    await call("POST", "/api/v1/sync", { endpoint: "203.0.113.1:51820", relay }, h.deviceToken);
+    // Not a hub yet: no relay handed out.
+    expect((await call("POST", "/api/v1/sync", {}, a.deviceToken)).body.peers[0].relay).toBeUndefined();
+    await call("PATCH", `/api/v1/devices/${h.device.id}`, { hub: true }, ADMIN);
+    expect((await call("POST", "/api/v1/sync", {}, a.deviceToken)).body.peers[0].relay).toEqual(relay);
+    for (const bad of [{ addr: "x", fingerprint: fp }, { addr: "1.2.3.4:443", fingerprint: "zz" }, "str"]) {
+      expect((await call("POST", "/api/v1/sync", { relay: bad }, h.deviceToken)).status).toBe(400);
+    }
+  });
+
   test("rejects bad candidates", async () => {
     const { call } = await setup();
     const a = await enroll(call, "a", KEY1);

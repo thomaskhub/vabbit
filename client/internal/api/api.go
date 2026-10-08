@@ -150,6 +150,13 @@ type Peer struct {
 	IP        string   `json:"ip"`
 	Hub       bool     `json:"hub"`
 	Endpoints []string `json:"endpoints"`
+	Relay     *Relay   `json:"relay,omitempty"`
+}
+
+// Relay is a hub's TLS-over-TCP relay for networks that block UDP.
+type Relay struct {
+	Addr        string `json:"addr"`
+	Fingerprint string `json:"fingerprint"`
 }
 
 type SyncResponse struct {
@@ -215,12 +222,15 @@ func (c *Client) Enroll(ctx context.Context, req EnrollRequest) (EnrollResponse,
 }
 
 // Sync reports this device's static endpoint and NAT traversal candidates and
-// returns the current peer list. nil candidates leaves the stored ones alone
-// (used by status and other one-off calls); an empty slice clears them.
-func (c *Client) Sync(ctx context.Context, endpoint string, candidates []string) (SyncResponse, error) {
+// returns the current peer list. nil candidates or relay leave the stored ones
+// alone (used by status and other one-off calls); an empty slice clears them.
+func (c *Client) Sync(ctx context.Context, endpoint string, candidates []string, relay *Relay) (SyncResponse, error) {
 	in := map[string]any{}
 	if candidates != nil {
 		in["candidates"] = candidates
+	}
+	if relay != nil {
+		in["relay"] = relay
 	}
 	if endpoint != "" {
 		in["endpoint"] = endpoint

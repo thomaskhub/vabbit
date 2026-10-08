@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -43,7 +44,7 @@ func Start(name, privateKey string, port int) (*Device, error) {
 		name = real
 	}
 	bind := newSTUNBind()
-	dev := device.NewDevice(t, bind, device.NewLogger(device.LogLevelError, "wireguard: "))
+	dev := device.NewDevice(t, bind, logger())
 	d := &Device{Name: name, dev: dev, tun: t, bind: bind}
 	if err := dev.IpcSet(fmt.Sprintf("private_key=%s\nlisten_port=%d\n", priv, port)); err != nil {
 		dev.Close()
@@ -198,3 +199,17 @@ func ParseStats(s string) map[string]PeerStat {
 
 // Done is closed when the device stops, e.g. because its interface was deleted.
 func (d *Device) Done() <-chan struct{} { return d.dev.Wait() }
+
+// logger reports wireguard-go errors except the routine "no known endpoint"
+// for peers behind NAT that we can only wait for.
+func logger() *device.Logger {
+	return &device.Logger{
+		Verbosef: device.DiscardLogf,
+		Errorf: func(format string, args ...any) {
+			msg := fmt.Sprintf(format, args...)
+			if !strings.Contains(msg, "no known endpoint") {
+				log.Print("wireguard: " + msg)
+			}
+		},
+	}
+}

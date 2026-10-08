@@ -153,3 +153,34 @@ func TestPlannerPrefersLANBehindSameNAT(t *testing.T) {
 		t.Fatalf("same public IP: want LAN candidate first, got %v", c[kA].Endpoint)
 	}
 }
+
+func TestTransportFallsBackToTCPAndRetriesUDP(t *testing.T) {
+	var tr transport
+	t0 := time.Unix(1_700_000_000, 0)
+	// UDP blocked: nothing from the hub for 12s -> TCP.
+	if tr.step(t0, true, wg.PeerStat{}, false) || tr.step(t0.Add(10*time.Second), true, wg.PeerStat{}, false) {
+		t.Fatal("switched too early")
+	}
+	if !tr.step(t0.Add(13*time.Second), true, wg.PeerStat{}, false) {
+		t.Fatal("should fall back to TCP")
+	}
+	tr.toggle(t0.Add(13 * time.Second))
+	// Traffic flows over TCP: stay, even with 30s gaps between keepalives.
+	now := t0.Add(15 * time.Second)
+	for i := uint64(1); i <= 12; i++ {
+		now = now.Add(30 * time.Second)
+		if tr.step(now, true, wg.PeerStat{RxBytes: i * 100}, false) {
+			t.Fatalf("left a working TCP path at step %d", i)
+		}
+	}
+	// STUN works again (left the hotel): after 5 min on TCP, retry UDP.
+	if !tr.step(now.Add(time.Second), true, wg.PeerStat{RxBytes: 1300}, true) {
+		t.Fatal("should retry UDP once UDP works")
+	}
+	tr.toggle(now)
+	// No relay offered: never move to TCP.
+	var tr2 transport
+	if tr2.step(t0, false, wg.PeerStat{}, false) || tr2.step(t0.Add(time.Minute), false, wg.PeerStat{}, false) {
+		t.Fatal("switched to TCP without a relay")
+	}
+}
