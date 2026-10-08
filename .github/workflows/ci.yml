@@ -65,6 +65,23 @@ jobs:
           name: vabbit-deploy
           path: dist/vabbit-deploy
 
+  sbom:
+    # Keeps sbom/ in step with the dependencies and publishes it as an artifact.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+      - run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.8.0
+      - run: ./scripts/sbom.sh
+      - name: SBOM is up to date
+        run: git diff --exit-code sbom/ || (echo "Run scripts/sbom.sh and commit sbom/" && exit 1)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/
+
   e2e:
     # Real WireGuard tunnels through emulated home NATs (network namespaces).
     runs-on: ubuntu-latest

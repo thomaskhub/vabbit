@@ -1,0 +1,160 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9093528c5fd7a7b914d2207667ef6f8933cc5b812aaacaf2c0c5cb24e3ac5d21"
+        }
+      ],
+      "name": "golang.org/x/crypto",
+      "purl": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.37.0"
+    },
+    {
+      "bom-ref": "pkg:golang/golang.org/x/net@v0.39.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "642bbb1cc583c695e96a229d87321f6a5b4bf4ba77d71ff77c23f5d5b73afdf6"
+        }
+      ],
+      "name": "golang.org/x/net",
+      "purl": "pkg:golang/golang.org/x/net@v0.39.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.39.0"
+    },
+    {
+      "bom-ref": "pkg:golang/golang.org/x/sys@v0.32.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "BSD-3-Clause"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "b3bece143bc841e89b0a67b34a793faba8807e476241a262e15ceba0216b376d"
+        }
+      ],
+      "name": "golang.org/x/sys",
+      "purl": "pkg:golang/golang.org/x/sys@v0.32.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.32.0"
+    },
+    {
+      "bom-ref": "pkg:golang/golang.zx2c4.com/wireguard@v0.0.0-20250521234502-f333402bd9cb?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "MIT"
+            }
+          }
+        ]
+      },
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c219c546558c71723d77e65b5a0fb8b079cba79d9de728883d4c4c052b785fd0"
+        }
+      ],
+      "name": "golang.zx2c4.com/wireguard",
+      "purl": "pkg:golang/golang.zx2c4.com/wireguard@v0.0.0-20250521234502-f333402bd9cb?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v0.0.0-20250521234502-f333402bd9cb"
+    }
+  ],
+  "dependencies": [
+    {
+      "dependsOn": [
+        "pkg:golang/golang.zx2c4.com/wireguard@v0.0.0-20250521234502-f333402bd9cb?type=module"
+      ],
+      "ref": "pkg:golang/vabbit@source?type=module#cmd/vabbit"
+    },
+    {
+      "dependsOn": [
+        "pkg:golang/golang.org/x/net@v0.39.0?type=module",
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+      ],
+      "ref": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module"
+    },
+    {
+      "dependsOn": [
+        "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+      ],
+      "ref": "pkg:golang/golang.org/x/net@v0.39.0?type=module"
+    },
+    {
+      "ref": "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+    },
+    {
+      "dependsOn": [
+        "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
+        "pkg:golang/golang.org/x/net@v0.39.0?type=module",
+        "pkg:golang/golang.org/x/sys@v0.32.0?type=module"
+      ],
+      "ref": "pkg:golang/golang.zx2c4.com/wireguard@v0.0.0-20250521234502-f333402bd9cb?type=module"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "pkg:golang/vabbit@source?type=module#cmd/vabbit",
+      "name": "vabbit",
+      "properties": [
+        {
+          "name": "cdx:gomod:build:env:CGO_ENABLED",
+          "value": "0"
+        },
+        {
+          "name": "cdx:gomod:build:env:GOARCH",
+          "value": "amd64"
+        },
+        {
+          "name": "cdx:gomod:build:env:GOOS",
+          "value": "linux"
+        },
+        {
+          "name": "cdx:gomod:build:env:GOVERSION",
+          "value": "go1.24.7"
+        }
+      ],
+      "purl": "pkg:golang/vabbit@source?type=module&goos=linux&goarch=amd64#cmd/vabbit",
+      "type": "application",
+      "version": "source"
+    }
+  },
+  "specVersion": "1.6",
+  "version": 1
+}

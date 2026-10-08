@@ -1,4 +1,4 @@
-.PHONY: test build edge client deploy
+.PHONY: test build edge client deploy sbom
 test:
 	cd edge && bun test
 	cd client && go vet ./... && go test ./...
@@ -11,3 +11,5 @@ deploy: edge
 	cp edge/dist/edge-script.js deploy/edgescript/bundle/
 	cd deploy && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/vabbit-deploy ./cmd/vabbit-deploy
 build: edge client deploy
+sbom:
+	./scripts/sbom.sh

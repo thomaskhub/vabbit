@@ -1,0 +1,66 @@
+{
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:npm/%40bunny.net/edgescript-sdk@0.12.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "name": "@bunny.net/edgescript-sdk",
+      "purl": "pkg:npm/%40bunny.net/edgescript-sdk@0.12.1",
+      "scope": "required",
+      "type": "library",
+      "version": "0.12.1"
+    },
+    {
+      "bom-ref": "pkg:npm/typescript@5.8.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "name": "typescript",
+      "purl": "pkg:npm/typescript@5.8.3",
+      "scope": "excluded",
+      "type": "library",
+      "version": "5.8.3"
+    },
+    {
+      "bom-ref": "pkg:npm/%40types/bun@1.2.20",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "name": "@types/bun",
+      "purl": "pkg:npm/%40types/bun@1.2.20",
+      "scope": "excluded",
+      "type": "library",
+      "version": "1.2.20"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "vabbit-edge",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "name": "vabbit-edge",
+      "type": "application"
+    }
+  },
+  "specVersion": "1.6",
+  "version": 1
+}

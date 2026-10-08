@@ -1,0 +1,75 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "components": [
+    {
+      "bom-ref": "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "MIT"
+            }
+          }
+        ]
+      },
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/BurntSushi/toml"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "92ea08c59432d96451935a6db60f5ab1ff9656fead590b8135598af3e9ea3ebd"
+        }
+      ],
+      "name": "github.com/BurntSushi/toml",
+      "purl": "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v1.4.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "dependsOn": [
+        "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module"
+      ],
+      "ref": "pkg:golang/vabbit-deploy@source?type=module#cmd/vabbit-deploy"
+    },
+    {
+      "ref": "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module"
+    }
+  ],
+  "metadata": {
+    "component": {
+      "bom-ref": "pkg:golang/vabbit-deploy@source?type=module#cmd/vabbit-deploy",
+      "name": "vabbit-deploy",
+      "properties": [
+        {
+          "name": "cdx:gomod:build:env:CGO_ENABLED",
+          "value": "0"
+        },
+        {
+          "name": "cdx:gomod:build:env:GOARCH",
+          "value": "amd64"
+        },
+        {
+          "name": "cdx:gomod:build:env:GOOS",
+          "value": "linux"
+        },
+        {
+          "name": "cdx:gomod:build:env:GOVERSION",
+          "value": "go1.24.7"
+        }
+      ],
+      "purl": "pkg:golang/vabbit-deploy@source?type=module&goos=linux&goarch=amd64#cmd/vabbit-deploy",
+      "type": "application",
+      "version": "source"
+    }
+  },
+  "specVersion": "1.6",
+  "version": 1
+}

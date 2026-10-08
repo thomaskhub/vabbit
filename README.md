@@ -117,6 +117,10 @@ vabbit login --server http://127.0.0.1:8787 --token vba_...
 sudo vabbit up --dry-run                 # syncs once and prints the peers instead of starting
 ```
 
+## Dependencies
+
+The full list with licenses is in [sbom/](sbom/README.md), as CycloneDX SBOMs that CI keeps up to date (`make sbom`).
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
