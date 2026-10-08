@@ -123,7 +123,7 @@ out of every peer list at once, and its own agent shuts its interface down.
 | `--device-ttl DURATION` | `never` | Devices enrolled with this key lose access this long after joining, e.g. `7d`. |
 | `--replace` | off | A device that joins with this key removes the existing device of the **same name** and takes over its VPN address. For machines that are deleted and rebuilt. |
 
-**Rebuilding a machine.** A VPN address is chosen from the device name, so a name that is free again gets the same address. If the old device is still listed, join the rebuilt machine with a `--replace` key: the old entry (and its token) is removed and the address stays. The new device is never a hub, even if the old one was; mark it again with `vabbit devices set <id> --hub=true`. Whoever holds a `--replace` key can take over any existing name, so create it with a short `--ttl` and, for one machine, without `--reusable`.
+**Rebuilding a machine.** A new device normally gets a new VPN address. To keep the old one, join the rebuilt machine with a `--replace` key while the old device is still listed: the old entry (and its token) is removed and the address stays. This also works if the machine kept its WireGuard key. The new device is never a hub, even if the old one was; mark it again with `vabbit devices set <id> --hub=true`. Whoever holds a `--replace` key can take over any existing name, so create it with a short `--ttl` and, for one machine, without `--reusable`.
 
 **`vabbit devices set ID`**
 

@@ -260,7 +260,7 @@ describe("optEndpoint", () => {
   });
 });
 
-describe("same name, same address", () => {
+describe("replacing a device of the same name", () => {
   async function key(call: any, body: object = {}) {
     const r = await call("POST", "/api/v1/setup-keys", body, ADMIN);
     expect(r.status).toBe(201);
@@ -332,22 +332,51 @@ describe("same name, same address", () => {
     expect((await call("POST", "/api/v1/enroll", { setupKey: k, name: "b", publicKey: KEY1 })).status).toBe(409);
   });
 
-  test("the address follows the name: same name on a fresh network, same address", async () => {
-    const one = await setup();
-    const two = await setup();
-    const a = await join(one.call, await key(one.call), "gateway", KEY1);
-    const b = await join(two.call, await key(two.call), "gateway", KEY2);
-    expect(b.device.ip).toBe(a.device.ip);
-    const c = await join(one.call, await key(one.call), "other", KEY3);
-    expect(c.device.ip).not.toBe(a.device.ip);
+  test("parallel enrollments with the same name get different addresses", async () => {
+    const { call } = await setup();
+    const k = await key(call, { reusable: true });
+    const rs = await Promise.all([KEY1, KEY2, KEY3].map((pk) => call("POST", "/api/v1/enroll", { setupKey: k, name: "ubuntu", publicKey: pk })));
+    expect(rs.map((r) => r.status)).toEqual([201, 201, 201]);
+    expect(new Set(rs.map((r) => r.body.device.ip)).size).toBe(3);
+    expect(new Set((await devices(call)).map((d) => d.ip)).size).toBe(3);
   });
 
-  test("an address survives a removal: remove, enroll again with the same name, same address", async () => {
+  test("a lost race moves the newcomer to a free address", async () => {
+    // A /30 has two host addresses; pick two keys whose probing starts at the same one.
+    const store = new MemoryStore();
+    const h = createHandler(store, { adminTokenSha256: await sha256Hex(ADMIN), networkCidr: "100.92.0.0/30", networkName: "tiny" });
+    const post = async (path: string, body: object, token?: string) => {
+      const res = await h(new Request(`https://net.example${path}`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: JSON.stringify(body) }));
+      return { status: res.status, body: (await res.json()) as any };
+    };
+    const keys: string[] = [];
+    for (let i = 1; keys.length < 2; i++) {
+      const pk = Buffer.alloc(32, i).toString("base64");
+      if (parseInt((await sha256Hex(pk)).slice(0, 8), 16) % 2 === 0) keys.push(pk);
+    }
+    const k = (await post("/api/v1/setup-keys", { reusable: true }, ADMIN)).body.key;
+    const rs = await Promise.all(keys.map((pk) => post("/api/v1/enroll", { setupKey: k, name: "vm", publicKey: pk })));
+    expect(rs.map((r) => r.status)).toEqual([201, 201]);
+    const stored = await Promise.all((await store.list("devices/")).map((n) => store.get<Device>(`devices/${n}`)));
+    expect(new Set(stored.map((d) => d!.ip)).size).toBe(2);
+    expect(stored.map((d) => d!.ip).sort()).toEqual(rs.map((r) => r.body.device.ip).sort());
+  });
+
+  test("a rebuilt machine that kept its WireGuard key can replace itself", async () => {
     const { call } = await setup();
-    const a = await join(call, await key(call), "db", KEY1);
-    await call("DELETE", `/api/v1/devices/${a.device.id}`, undefined, ADMIN);
-    const b = await join(call, await key(call), "db", KEY2);
-    expect(b.device.ip).toBe(a.device.ip);
+    const old = await join(call, await key(call), "db", KEY1);
+    const fresh = await join(call, await key(call, { replace: true }), "db", KEY1);
+    expect(fresh.device.ip).toBe(old.device.ip);
+    expect((await devices(call)).map((d) => d.id)).toEqual([fresh.device.id]);
+    expect((await call("POST", "/api/v1/sync", {}, old.deviceToken)).status).toBe(401);
+  });
+
+  test("a refused enrollment does not use up the key", async () => {
+    const { call } = await setup();
+    await join(call, await key(call), "a", KEY1);
+    const k = await key(call);
+    expect((await call("POST", "/api/v1/enroll", { setupKey: k, name: "b", publicKey: KEY1 })).status).toBe(409);
+    await join(call, k, "b", KEY2);
   });
 
   test("replace is a key property: shown in the list, ignored on enrollment, must be a boolean", async () => {

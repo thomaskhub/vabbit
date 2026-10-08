@@ -237,21 +237,25 @@ class Api {
     return json(200, { deleted: id });
   }
 
-  /** Validates a setup key and consumes one use. */
-  private async consumeSetupKey(key: unknown): Promise<SetupKey> {
+  /** Validates a setup key without using it. */
+  private async checkSetupKey(key: unknown): Promise<SetupKey> {
     if (typeof key !== "string" || !/^vbk_[A-Za-z0-9_-]{43}$/.test(key)) {
       throw new HttpError(401, "invalid setup key");
     }
     const hash = await sha256Hex(key);
-    const storeKey = `setup-keys/${hash}.json`;
-    const rec = await this.store.get<SetupKey>(storeKey);
+    const rec = await this.store.get<SetupKey>(`setup-keys/${hash}.json`);
     if (!rec || !timingSafeEqual(rec.hash, hash)) throw new HttpError(401, "invalid setup key");
     if (rec.expiresAt !== null && rec.expiresAt <= this.now()) throw new HttpError(401, "setup key expired");
     if (rec.maxUses !== 0 && rec.uses >= rec.maxUses) throw new HttpError(401, "setup key used up");
+    return rec;
+  }
+
+  /** Consumes one use of a key that checkSetupKey accepted. */
+  private async useSetupKey(rec: SetupKey): Promise<void> {
+    const storeKey = `setup-keys/${rec.hash}.json`;
     rec.uses++;
     if (!rec.reusable && rec.uses >= rec.maxUses) await this.store.delete(storeKey);
     else await this.store.put(storeKey, rec);
-    return rec;
   }
 
   // ---- devices ---------------------------------------------------------------
@@ -273,23 +277,24 @@ class Api {
     if (body.hub !== undefined) throw new HttpError(400, "hub can only be set by the admin");
 
     // Validate everything before consuming the key.
-    const setupKey = await this.consumeSetupKey(body.setupKey);
+    const setupKey = await this.checkSetupKey(body.setupKey);
 
     const devices = await this.allDevices();
-    if (devices.some((d) => d.publicKey === publicKey)) {
+    // A replace key swaps the devices of the same name (also one with this public key: a rebuilt machine
+    // that kept its WireGuard key).
+    const sameName = setupKey.replace ? devices.filter((d) => d.name === name) : [];
+    if (devices.some((d) => d.publicKey === publicKey && !sameName.includes(d))) {
       throw new HttpError(409, "a device with this public key already exists");
     }
-    // A replace key swaps the devices of the same name: the newest one's address is kept, so a rebuilt
-    // machine keeps its VPN address. The old devices are removed first, so peers never see one address twice.
-    const sameName = setupKey.replace ? devices.filter((d) => d.name === name) : [];
+    await this.useSetupKey(setupKey);
+    // The newest replaced device's address is kept, so a rebuilt machine keeps its VPN address. The old
+    // devices are removed first, so peers never see one address twice.
     let ip: string | null;
     if (sameName.length > 0) {
       ip = sameName.reduce((a, b) => (b.createdAt >= a.createdAt ? b : a)).ip;
       for (const d of sameName) await this.store.delete(`devices/${d.id}.json`);
     } else {
-      // The search starts at a position derived from the name, so the same name gets the same address
-      // while it is free (also after the old device was removed or expired).
-      ip = allocate(this.cidr, new Set(devices.map((d) => d.ip)), await sha256Hex(name));
+      ip = allocate(this.cidr, new Set(devices.map((d) => d.ip)), await sha256Hex(publicKey));
     }
     if (!ip) throw new HttpError(507, "network is full");
 
@@ -309,6 +314,20 @@ class Api {
       expiresAt: setupKey.deviceTtlSeconds ? t + setupKey.deviceTtlSeconds * 1000 : null,
     };
     await this.store.put(`devices/${id}.json`, dev);
+    // Storage has no compare-and-swap, so a concurrent enrollment may have picked the same address. Look
+    // again: of the devices holding it, the oldest (then lowest id) keeps it and the others move.
+    for (let i = 0; i < 3; i++) {
+      const now = await this.allDevices();
+      const holders = now.filter((d) => d.ip === dev.ip);
+      if (holders.every((d) => d.id === id || d.createdAt > t || (d.createdAt === t && d.id > id))) break;
+      const fresh = allocate(this.cidr, new Set(now.map((d) => d.ip)), await sha256Hex(publicKey));
+      if (!fresh) {
+        await this.store.delete(`devices/${id}.json`);
+        throw new HttpError(507, "network is full");
+      }
+      dev.ip = fresh;
+      await this.store.put(`devices/${id}.json`, dev);
+    }
     return json(201, {
       device: publicDevice(dev),
       deviceToken: token,

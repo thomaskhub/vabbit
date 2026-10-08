@@ -25,7 +25,8 @@ export function ipToString(n: number): string {
 /**
  * Picks a free host address. Starts probing at a position derived from `seed`
  * (a hex hash of the device public key) so that concurrent enrollments, which
- * cannot see each other's writes, almost never pick the same address.
+ * cannot see each other's writes, almost never pick the same address. Enrollment
+ * checks again after writing and moves the newer device if they did.
  */
 export function allocate(cidr: Cidr, used: Set<string>, seedHex: string): string | null {
   const hosts = 2 ** (32 - cidr.bits) - 2; // exclude network and broadcast
