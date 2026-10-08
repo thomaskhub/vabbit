@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux && !windows
 
 package wg
 
@@ -10,8 +10,8 @@ import (
 	"golang.zx2c4.com/wireguard/device"
 )
 
-// TODO(macos, windows): configure addresses and routes natively.
-var errUnsupported = errors.New("this platform is not supported yet (Linux only for now)")
+// TODO(macos): configure addresses and routes natively.
+var errUnsupported = errors.New("running a device is not supported on this platform yet (Linux and Windows only)")
 
 var ifaceRE = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,15}$`)
 
@@ -23,3 +23,6 @@ func serveUAPI(string, *device.Device) func()   { return nil }
 func Show(string) (map[string]PeerStat, error)  { return nil, errUnsupported }
 
 func Down(string) error { return errUnsupported }
+
+func (d *Device) AllowInbound(netip.Prefix, int) error { return nil }
+func RemoveInbound(string)                             {}

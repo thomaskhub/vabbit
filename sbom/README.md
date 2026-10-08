@@ -22,3 +22,13 @@ The Go standard library (BSD-3-Clause) is linked into the Go binary and not list
 | @types/bun | 1.2.20 | MIT |
 | typescript | 5.8.3 | Apache-2.0 |
 
+## Windows only
+
+The SBOMs describe the Linux build. The Windows build also links the Go module below and ships
+the Wintun driver DLL next to vabbit.exe (downloaded and checked by `scripts/fetch_wintun.py`).
+
+| Component | Version | License |
+|---|---|---|
+| golang.zx2c4.com/wintun | v0.0.0-20230126152724-0fa3db229ce2 | MIT |
+| wintun.dll | 0.14.1 | Wintun Prebuilt Binaries License (redistributed unmodified) |
+

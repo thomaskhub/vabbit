@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -181,6 +183,11 @@ func Run(ctx context.Context, o Options) error {
 					if err := applyForwarding(dev, n.SelfHub, o.Logf); err != nil {
 						return err
 					}
+					if n.Address != lastAddr {
+						if err := dev.AllowInbound(n.Address.Masked(), o.Device.ListenPort); err != nil {
+							o.Logf("could not add the firewall rules: %v", err)
+						}
+					}
 					o.Logf("interface %s up with %s (hub: %v)", dev.Name, n.Address, n.SelfHub)
 					lastAddr, lastHub = n.Address, n.SelfHub
 				}
@@ -283,7 +290,12 @@ func Run(ctx context.Context, o Options) error {
 }
 
 // TransportFile records how this device reaches the hub, for `vabbit status`.
-func TransportFile(iface string) string { return "/var/run/wireguard/" + iface + ".transport" }
+func TransportFile(iface string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(state.DefaultDir, iface+".transport")
+	}
+	return "/var/run/wireguard/" + iface + ".transport"
+}
 
 func writeTransport(iface, s string) { _ = os.WriteFile(TransportFile(iface), []byte(s+"\n"), 0o600) }
 

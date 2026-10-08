@@ -34,12 +34,14 @@ jobs:
           mkdir -p out
           (cd edge && bun install --frozen-lockfile && bun run build)
           cp edge/dist/edge-script.js client/internal/deploy/edgescript/bundle/
-          # Linux runs devices and admin commands; macOS is for admins (deploy, keys, devices).
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          # Linux and Windows run devices and admin commands; macOS is for admins (deploy, keys, devices).
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            ext=""; [ "${target%/*}" = windows ] && ext=.exe
             (cd client && CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build -trimpath \
-              -ldflags="-s -w -X main.version=$VERSION" -o ../out/vabbit-${target%/*}-${target#*/} ./cmd/vabbit)
+              -ldflags="-s -w -X main.version=$VERSION" -o ../out/vabbit-${target%/*}-${target#*/}$ext ./cmd/vabbit)
           done
-          cp packaging/vabbit@.service scripts/install.sh out/
+          python3 scripts/fetch_wintun.py out   # wintun-{amd64,arm64}.dll for Windows
+          cp packaging/vabbit@.service scripts/install.sh scripts/install.ps1 out/
           (cd out && sha256sum * > SHA256SUMS)
       - name: Publish
         env:

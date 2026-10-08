@@ -65,5 +65,16 @@ jq -n -S --arg sdkv "$sdk_ver" \
     jq -r '.components[]? | "| \(.name) | \(.version // "-") | \([(.licenses // .evidence.licenses // [])[] | .license | (.id // .name)] | join(", ") | if . == "" then "unknown" else . end) |"' "sbom/$f.cdx.json" | sort
     echo
   done
+  wintun=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' scripts/fetch_wintun.py)
+  echo "## Windows only"
+  echo
+  echo "The SBOMs describe the Linux build. The Windows build also links the Go module below and ships"
+  echo "the Wintun driver DLL next to vabbit.exe (downloaded and checked by \`scripts/fetch_wintun.py\`)."
+  echo
+  echo "| Component | Version | License |"
+  echo "|---|---|---|"
+  echo "| golang.zx2c4.com/wintun | $(cd client && go list -m -f '{{.Version}}' golang.zx2c4.com/wintun) | MIT |"
+  echo "| wintun.dll | $wintun | Wintun Prebuilt Binaries License (redistributed unmodified) |"
+  echo
 } >sbom/README.md
 echo "SBOMs written to sbom/"

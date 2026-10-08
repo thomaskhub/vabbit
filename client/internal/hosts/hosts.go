@@ -9,13 +9,26 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
 )
 
 // DefaultFile is the system hosts file.
-const DefaultFile = "/etc/hosts"
+// DefaultFile is /etc/hosts, or %SystemRoot%\System32\drivers\etc\hosts on Windows.
+var DefaultFile = defaultFile()
+
+func defaultFile() string {
+	if runtime.GOOS == "windows" {
+		root := os.Getenv("SystemRoot")
+		if root == "" {
+			root = `C:\Windows`
+		}
+		return filepath.Join(root, "System32", "drivers", "etc", "hosts")
+	}
+	return "/etc/hosts"
+}
 
 // Entry is one line of the block: an address and a full host name.
 type Entry struct {
@@ -59,11 +72,12 @@ func Replace(content, iface, block string) (string, error) {
 	if content == "" {
 		lines = nil
 	}
-	b := slices.Index(lines, begin)
+	// A hosts file edited on Windows may end its lines with \r\n.
+	b := slices.IndexFunc(lines, func(l string) bool { return strings.TrimSuffix(l, "\r") == begin })
 	e := -1
 	if b >= 0 {
 		for i := b + 1; i < len(lines); i++ {
-			if lines[i] == end {
+			if strings.TrimSuffix(lines[i], "\r") == end {
 				e = i
 				break
 			}

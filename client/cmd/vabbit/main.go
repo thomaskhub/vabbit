@@ -48,12 +48,13 @@ Admin:
   vabbit devices rm ID
   vabbit devices set ID [--name NAME] [--hub=true|false] [--expires 7d|never]
 
-Device (Linux, run as root):
+Device (Linux as root, Windows as Administrator):
   vabbit up [--server URL] [--setup-key KEY] [--name NAME] [--endpoint HOST:PORT] [--hub]
                [--port 51820] [--iface vb0] [--interval 15s] [--stun host:port,...] [--domain vabbit|none] [--dry-run]
   vabbit down [--iface vb0]
   vabbit leave [--iface vb0]               remove this device from the network
   vabbit status [--iface vb0]
+  vabbit service install|uninstall [--iface vb0]   Windows: run the device as a service
 
 The setup key can also be passed in VABBIT_SETUP_KEY to keep it out of the process list.
 Admin commands ask for the master password (or read VABBIT_ADMIN_PASSWORD); with several
@@ -68,8 +69,12 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	var err error
 	args := os.Args[2:]
+	// Started by the Windows service manager: run `vabbit up` until the service is stopped.
+	if os.Args[1] == "up" && runAsService(func(ctx context.Context) error { return cmdUp(ctx, args) }) {
+		return
+	}
+	var err error
 	switch os.Args[1] {
 	case "deploy":
 		err = cli.Run(ctx, args)
@@ -91,6 +96,8 @@ func main() {
 		err = cmdLeave(ctx, args)
 	case "status":
 		err = cmdStatus(ctx, args)
+	case "service":
+		err = cmdService(args)
 	case "version":
 		fmt.Println(version)
 	case "help", "-h", "--help":
@@ -429,8 +436,8 @@ func cmdUp(ctx context.Context, args []string) error {
 	dryRun := fs.Bool("dry-run", false, "enroll/sync once and print the peers instead of starting the interface")
 	fs.Parse(args)
 
-	if !*dryRun && os.Geteuid() != 0 {
-		return errors.New("must run as root to configure WireGuard (or use --dry-run)")
+	if !*dryRun && !privileged() {
+		return errors.New(needPrivilege)
 	}
 	if *interval < 5*time.Second {
 		return errors.New("--interval must be at least 5s")
@@ -719,6 +726,7 @@ func cmdLeave(ctx context.Context, args []string) error {
 		return err
 	}
 	_ = wg.Down(*df.iface)
+	afterLeave(*df.iface)
 	if err := state.Remove(path); err != nil {
 		return err
 	}

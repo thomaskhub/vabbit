@@ -24,6 +24,8 @@ import (
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
+
+	"vabbit/internal/secfile"
 )
 
 // Network is one network's admin credentials. Server is empty until the
@@ -86,12 +88,8 @@ func Exists(path string) bool {
 
 // Load decrypts the login file. It returns os.ErrNotExist if there is none.
 func Load(path string, password []byte) (Login, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
+	if err := secfile.Check(path); err != nil {
 		return Login{}, err
-	}
-	if fi.Mode().Perm()&0o077 != 0 {
-		return Login{}, fmt.Errorf("%s is readable by other users (mode %o); run chmod 600 on it", path, fi.Mode().Perm())
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -144,7 +142,7 @@ func Save(path string, l Login, password []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := secfile.MkdirAll(filepath.Dir(path), secfile.User); err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
@@ -152,7 +150,7 @@ func Save(path string, l Login, password []byte) error {
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
+	if err := secfile.Protect(tmp, secfile.User); err != nil {
 		tmp.Close()
 		return err
 	}

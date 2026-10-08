@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -76,7 +77,7 @@ func TestApply(t *testing.T) {
 	if string(b) != "127.0.0.1 localhost\n"+want {
 		t.Errorf("file = %q", b)
 	}
-	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o644 {
+	if fi, _ := os.Stat(path); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o644 {
 		t.Errorf("mode changed to %o", fi.Mode().Perm())
 	}
 	if changed, err = Apply(path, "vb0", entries()); err != nil || changed {
@@ -137,7 +138,7 @@ func TestApplyReplacesTheFileAndKeepsItsMode(t *testing.T) {
 	if os.SameFile(before, after) {
 		t.Error("expected a new file renamed over the old one")
 	}
-	if after.Mode().Perm() != 0o640 {
+	if runtime.GOOS != "windows" && after.Mode().Perm() != 0o640 {
 		t.Errorf("mode = %o, want 640", after.Mode().Perm())
 	}
 	// nothing to change: the file is not rewritten
@@ -200,5 +201,16 @@ func TestApplyConcurrentInterfaces(t *testing.T) {
 		if !strings.Contains(string(b), fmt.Sprintf("# BEGIN vabbit vb%d\n", i)) {
 			t.Errorf("block of vb%d lost", i)
 		}
+	}
+}
+
+func TestReplaceCRLF(t *testing.T) {
+	in := "127.0.0.1 localhost\r\n# BEGIN vabbit vb0\r\n100.92.0.2 a.vabbit\r\n# END vabbit vb0\r\n10.0.0.1 nas\r\n"
+	got, err := Replace(in, "vb0", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "127.0.0.1 localhost\r\n10.0.0.1 nas\r\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

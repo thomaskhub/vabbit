@@ -54,6 +54,33 @@ jobs:
           name: vabbit
           path: client/dist/
 
+  windows:
+    # Unit tests on Windows, then a real Wintun adapter run as a Windows service
+    # (scripts/windows-smoke.ps1), installed with install.ps1.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+      - name: Unit tests
+        shell: bash
+        run: cd client && go vet ./... && go test ./...
+      - name: Build and collect the release files
+        shell: bash
+        run: |
+          mkdir -p out
+          (cd client && CGO_ENABLED=0 go build -trimpath -o ../out/vabbit-windows-amd64.exe ./cmd/vabbit)
+          python scripts/fetch_wintun.py out
+          (cd out && sha256sum vabbit-windows-amd64.exe wintun-amd64.dll > SHA256SUMS)
+          (cd edge && bun install --frozen-lockfile)
+      - name: Smoke test (service, adapter, status, firewall, hosts, leave)
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows-smoke.ps1 -Assets "%CD%\out"
+
   sbom:
     # Keeps sbom/ in step with the dependencies and publishes it as an artifact.
     runs-on: ubuntu-latest

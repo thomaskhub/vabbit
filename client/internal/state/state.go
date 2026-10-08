@@ -1,12 +1,14 @@
-// Package state persists device enrollment with tight permissions.
+// Package state persists device enrollment with tight permissions (see secfile).
 package state
 
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+
+	"vabbit/internal/secfile"
 )
 
 // Device is what a machine remembers after enrolling. It contains the
@@ -25,19 +27,26 @@ type Device struct {
 	Domain string `json:"domain,omitempty"`
 }
 
-const DefaultDir = "/var/lib/vabbit"
+// DefaultDir is /var/lib/vabbit, or %ProgramData%\vabbit on Windows.
+var DefaultDir = defaultDir()
+
+func defaultDir() string {
+	if runtime.GOOS == "windows" {
+		if pd := os.Getenv("ProgramData"); pd != "" {
+			return filepath.Join(pd, "vabbit")
+		}
+		return `C:\ProgramData\vabbit`
+	}
+	return "/var/lib/vabbit"
+}
 
 func DevicePath(dir, iface string) string { return filepath.Join(dir, iface+".json") }
 
 // Load reads JSON into v. It returns os.ErrNotExist if the file is missing and
 // refuses files that other users can read.
 func Load(path string, v any) error {
-	fi, err := os.Stat(path)
-	if err != nil {
+	if err := secfile.Check(path); err != nil {
 		return err
-	}
-	if fi.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("%s is readable by other users (mode %o); run chmod 600 on it", path, fi.Mode().Perm())
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -48,7 +57,7 @@ func Load(path string, v any) error {
 
 // Save writes v atomically with mode 0600 inside a 0700 directory.
 func Save(path string, v any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := secfile.MkdirAll(filepath.Dir(path), secfile.Machine); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(v, "", "  ")
@@ -60,7 +69,7 @@ func Save(path string, v any) error {
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
+	if err := secfile.Protect(tmp, secfile.Machine); err != nil {
 		tmp.Close()
 		return err
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -23,7 +24,7 @@ func TestSaveLoad(t *testing.T) {
 			t.Fatalf("%q readable in the file:\n%s", leak, raw)
 		}
 	}
-	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(path); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %o", fi.Mode().Perm())
 	}
 	got, err := Load(path, []byte("correct horse"))
@@ -42,9 +43,11 @@ func TestSaveLoad(t *testing.T) {
 	if _, err := Load(path, []byte("correct horse")); err == nil {
 		t.Fatal("tampered file accepted")
 	}
-	os.Chmod(path, 0o644)
-	if _, err := Load(path, []byte("correct horse")); err == nil {
-		t.Fatal("world-readable file accepted")
+	if runtime.GOOS != "windows" { // Windows uses ACLs, see internal/secfile
+		os.Chmod(path, 0o644)
+		if _, err := Load(path, []byte("correct horse")); err == nil {
+			t.Fatal("world-readable file accepted")
+		}
 	}
 }
 

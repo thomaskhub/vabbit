@@ -3,17 +3,14 @@
 package wg
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/ipc"
@@ -95,28 +92,14 @@ func Show(name string) (map[string]PeerStat, error) {
 		return nil, fmt.Errorf("interface %s is not running", name)
 	}
 	defer c.Close()
-	if _, err := c.Write([]byte("get=1\n\n")); err != nil {
-		return nil, err
-	}
-	_ = c.SetDeadline(time.Now().Add(5 * time.Second))
-	// The socket stays open for more requests; a reply ends with "errno=N" and a blank line.
-	var b strings.Builder
-	sc := bufio.NewScanner(io.LimitReader(c, 1<<20))
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" {
-			break
-		}
-		if strings.HasPrefix(line, "errno=") && line != "errno=0" {
-			return nil, fmt.Errorf("interface %s: %s", name, line)
-		}
-		b.WriteString(line + "\n")
-	}
-	if err := sc.Err(); err != nil {
-		return nil, err
-	}
-	return ParseStats(b.String()), nil
+	return queryStats(c, name)
 }
+
+// AllowInbound is a no-op on Linux: the host firewall is left to the admin.
+func (d *Device) AllowInbound(netip.Prefix, int) error { return nil }
+
+// RemoveInbound is a no-op on Linux.
+func RemoveInbound(string) {}
 
 // Down deletes the interface, which also stops the agent that owns it.
 func Down(name string) error {

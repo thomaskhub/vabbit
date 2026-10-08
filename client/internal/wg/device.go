@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/netip"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +39,9 @@ func Start(name, privateKey string, port int) (*Device, error) {
 	}
 	t, err := tun.CreateTUN(name, MTU)
 	if err != nil {
+		if runtime.GOOS == "windows" {
+			return nil, fmt.Errorf("creating Wintun adapter %s (wintun.dll must be next to vabbit.exe): %w", name, err)
+		}
 		return nil, fmt.Errorf("creating TUN device %s: %w", name, err)
 	}
 	if real, err := t.Name(); err == nil {

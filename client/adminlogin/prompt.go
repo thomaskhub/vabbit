@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"unicode/utf8"
 
 	"golang.org/x/term"
@@ -54,19 +55,20 @@ func NewPassword() ([]byte, error) {
 
 // Prompt reads a secret from the terminal, showing * for each character.
 func Prompt(prompt string) (string, error) {
-	t, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	in, out, err := openTerminal()
 	if err != nil {
 		return "", fmt.Errorf("no terminal to ask for the master password; set %s", PasswordEnv)
 	}
-	defer t.Close()
-	fd := int(t.Fd())
+	defer in.Close()
+	defer out.Close()
+	fd := int(in.Fd())
 	old, err := term.MakeRaw(fd)
 	if err != nil {
 		return "", fmt.Errorf("no terminal to ask for the master password; set %s", PasswordEnv)
 	}
 	defer term.Restore(fd, old)
-	fmt.Fprint(t, prompt)
-	return ReadMasked(t, t)
+	fmt.Fprint(out, prompt)
+	return ReadMasked(in, out)
 }
 
 // ReadMasked reads a line from a terminal in raw mode, echoing * per
@@ -112,4 +114,27 @@ func ReadMasked(r io.Reader, w io.Writer) (string, error) {
 			}
 		}
 	}
+}
+
+// openTerminal opens the controlling terminal for reading and writing:
+// /dev/tty, or the console (CONIN$ and CONOUT$) on Windows.
+func openTerminal() (in, out *os.File, err error) {
+	if runtime.GOOS == "windows" {
+		if in, err = os.OpenFile("CONIN$", os.O_RDWR, 0); err != nil {
+			return nil, nil, err
+		}
+		if out, err = os.OpenFile("CONOUT$", os.O_RDWR, 0); err != nil {
+			in.Close()
+			return nil, nil, err
+		}
+		return in, out, nil
+	}
+	if in, err = os.OpenFile("/dev/tty", os.O_RDWR, 0); err != nil {
+		return nil, nil, err
+	}
+	if out, err = os.OpenFile("/dev/tty", os.O_RDWR, 0); err != nil {
+		in.Close()
+		return nil, nil, err
+	}
+	return in, out, nil
 }
