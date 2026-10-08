@@ -14,7 +14,7 @@ mention or compare to NetBird in the docs (removed on purpose).
 
 | Part | Path | Language | Notes |
 |---|---|---|---|
-| Control plane | `edge/` | TypeScript (Bun) | `src/handler.ts` API, `store.ts` Bunny Storage, `ipam.ts`, `crypto.ts`, `dev.ts` local server |
+| Control plane | `edge/` | TypeScript (Bun) | `src/handler.ts` API, `store.ts` Bunny Storage, `ipam.ts`, `crypto.ts`, `dev.ts` local server; `worker.ts` + `r2store.ts` run the same API as a Cloudflare Worker on R2 (manual deploy, docs/DEPLOY.md) |
 | Client + agent | `client/` (module `vabbit`) | Go | `cmd/vabbit`, `adminlogin/` (encrypted admin file), `internal/{agent,api,relay,state,stun,wg}` |
 | Deploy tool | `deploy/` (module `vabbit-deploy`) | Go | `cmd/vabbit-deploy`, `internal/{config,deploy}`; embeds the built edge script; `replace vabbit => ../client` |
 | Installer | `scripts/install.sh` | POSIX sh | curl one-liner for client devices |

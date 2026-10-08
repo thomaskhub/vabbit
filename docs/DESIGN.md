@@ -15,6 +15,7 @@ endpoints its peers have.
 |---|---|---|
 | `edge/` | Bunny Edge Script (TypeScript) | HTTP API: setup keys, enrollment, device list, peer sync |
 | Bunny Storage zone | Bunny | Holds small JSON records (devices, setup keys). No secrets, only hashes |
+| `edge/src/worker.ts` | Cloudflare Worker + R2 (optional) | The same API and records on Cloudflare, deployed by hand ([DEPLOY.md](DEPLOY.md#cloudflare-workers-and-r2-by-hand)) |
 | `client/` | Go binary `vabbit` (Linux first) | Admin CLI and the device agent that configures WireGuard |
 
 ## Credentials

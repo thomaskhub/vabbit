@@ -72,13 +72,13 @@ does not manage it yet: build the Worker and deploy it with
 [wrangler](https://developers.cloudflare.com/workers/wrangler/).
 
 1. Build: `make worker` (or `cd edge && bun run build:worker`) gives `edge/dist/worker.js`.
-2. Create a **private** R2 bucket, e.g. `vabbit-home-state`. Never attach a public domain to it: its objects
-   describe the network.
-3. `wrangler.toml` next to the bundle:
+2. Create a **private** R2 bucket, e.g. `vabbit-home-state`. Keep its public access off (no `r2.dev` URL and
+   no custom domain): its objects describe the network.
+3. `wrangler.toml` in `edge/` (not in `dist/`, which a clean build deletes):
 
    ```toml
    name = "vabbit-home"
-   main = "worker.js"
+   main = "dist/worker.js"
    compatibility_date = "2025-01-01"
 
    [[r2_buckets]]
@@ -93,7 +93,8 @@ does not manage it yet: build the Worker and deploy it with
 4. Create the admin token and give the Worker only its hash:
    `vabbit admin-token` prints both; `wrangler secret put ADMIN_TOKEN_SHA256` takes the hash. Keep the token
    for `vabbit login --server https://vabbit-home.<account>.workers.dev`.
-5. `wrangler deploy`. A request before the secret and the binding exist answers `503 server misconfigured`.
+5. `wrangler deploy` (it fails if the bucket doesn't exist). Until the secret is set, requests answer
+   `503 server misconfigured`.
 
 | Name | Kind | Value |
 |---|---|---|
