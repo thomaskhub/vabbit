@@ -52,8 +52,13 @@ type peerState struct {
 //     in the background and traffic moves to direct as soon as it succeeds.
 type Planner struct {
 	MyPublic netip.Addr // our STUN-mapped address, if known
-	peers    map[string]*peerState
-	kick     map[string]bool
+	// HaveV4 and HaveV6 say which address families this host can use. Both false means unknown:
+	// no candidate is dropped.
+	HaveV4, HaveV6 bool
+	// LocalV6 are our own IPv6 addresses: a peer candidate in the same /64 is on our LAN and tried first.
+	LocalV6 []netip.Addr
+	peers   map[string]*peerState
+	kick    map[string]bool
 }
 
 func NewPlanner() *Planner { return &Planner{peers: map[string]*peerState{}, kick: map[string]bool{}} }
@@ -75,12 +80,7 @@ func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map
 		key := peer.PublicKey
 		live[key] = true
 		st := p.peers[key]
-		cands := p.order(peer.Candidates)
-		if peer.Hub && len(cands) > 1 {
-			// A hub is public by definition: dial its static endpoint only (its
-			// other candidates are typically a cloud VM's private address).
-			cands = cands[:1]
-		}
+		cands := p.dialList(peer)
 		if st == nil || !slices.Equal(st.cands, cands) {
 			st = &peerState{cands: cands}
 			p.peers[key] = st
@@ -132,9 +132,30 @@ func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map
 	return cfgs, paths
 }
 
-// order puts private (LAN) candidates first when the peer is behind the same
-// public address as us, since most NATs don't hairpin. Otherwise the server's
-// order stands: static endpoint, STUN-mapped address, LAN addresses.
+// dialList is the candidates Plan punches towards for peer, in order.
+func (p *Planner) dialList(peer ResolvedPeer) []netip.AddrPort {
+	cands := p.order(peer.Candidates)
+	if peer.Hub && len(cands) > 1 {
+		// A hub is public by definition: dial its static endpoint only (its
+		// other candidates are typically a cloud VM's private address).
+		cands = cands[:1]
+	}
+	return cands
+}
+
+// HubTarget is the address Plan dials for a hub, which the TCP relay must intercept. It is invalid
+// when the hub has no candidates.
+func (p *Planner) HubTarget(hub ResolvedPeer) netip.AddrPort {
+	if c := p.dialList(hub); len(c) > 0 {
+		return c[0]
+	}
+	return netip.AddrPort{}
+}
+
+// order drops candidates of a family this host cannot use, puts private (LAN) candidates first when
+// the peer is behind the same public address as us (most NATs don't hairpin) and IPv6 candidates in
+// one of our own /64s before the rest. Otherwise the server's order stands: static endpoint,
+// STUN-mapped address, LAN addresses.
 func (p *Planner) order(c []netip.AddrPort) []netip.AddrPort {
 	sameNAT := false
 	for _, a := range c {
@@ -142,7 +163,7 @@ func (p *Planner) order(c []netip.AddrPort) []netip.AddrPort {
 			sameNAT = true
 		}
 	}
-	out := slices.Clone(c)
+	out := slices.Clone(filterFamilies(c, p.HaveV4, p.HaveV6))
 	if sameNAT {
 		slices.SortStableFunc(out, func(a, b netip.AddrPort) int {
 			pa, pb := a.Addr().IsPrivate(), b.Addr().IsPrivate()
@@ -155,5 +176,30 @@ func (p *Planner) order(c []netip.AddrPort) []netip.AddrPort {
 			return 0
 		})
 	}
+	if len(p.LocalV6) > 0 {
+		slices.SortStableFunc(out, func(a, b netip.AddrPort) int {
+			la, lb := p.onOurV6LAN(a.Addr()), p.onOurV6LAN(b.Addr())
+			switch {
+			case la && !lb:
+				return -1
+			case lb && !la:
+				return 1
+			}
+			return 0
+		})
+	}
 	return out
+}
+
+// onOurV6LAN reports whether ip is an IPv6 address in the same /64 as one of our own.
+func (p *Planner) onOurV6LAN(ip netip.Addr) bool {
+	if ip.Unmap().Is4() {
+		return false
+	}
+	for _, l := range p.LocalV6 {
+		if pf, err := l.Prefix(64); err == nil && pf.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }

@@ -70,7 +70,12 @@ and devices do the punching themselves.
 2. **Candidates.** Every sync the agent asks two STUN servers for its mapped
    address and reports it, plus its LAN addresses, as `candidates`. Different
    answers from the two servers mean a symmetric NAT (logged; punching will
-   likely fail and the hub carries the traffic).
+   likely fail and the hub carries the traffic). This works over IPv4 and over
+   IPv6: the agent asks over each family the host has an address for, offers the
+   mapped address of each family and its global or unique-local IPv6 addresses
+   (at most six candidates, shared between the families), and tries an IPv6
+   candidate in one of its own /64s first. A host without IPv4 therefore needs no
+   `--endpoint`. The overlay addresses stay IPv4.
 3. **Punching.** For each peer without a live session the agent points the
    WireGuard endpoint at the peer's next candidate every 10s and forces a
    handshake. Both sides do this at once, so each side's outbound packet opens

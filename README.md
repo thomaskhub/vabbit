@@ -182,7 +182,9 @@ sudo systemctl enable --now vabbit@vb0                                          
 
 `vabbit up` without `--dry-run` enrolls and runs the tunnel in the foreground instead.
 Devices need `iproute2` and `/dev/net/tun`; WireGuard itself is built in. Outbound UDP to
-STUN servers (default Cloudflare and Google) is used to discover the public address.
+STUN servers (default Cloudflare and Google) is used to discover the public address. Devices
+can reach each other over IPv4 or IPv6 (a host with only IPv6 works without `--endpoint`); the
+VPN addresses are IPv4.
 To join a second network, use another interface: `--iface vb1` and `vabbit@vb1`.
 
 | Command | What it does |

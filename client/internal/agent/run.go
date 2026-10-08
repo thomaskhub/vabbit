@@ -64,7 +64,7 @@ func Run(ctx context.Context, o Options) error {
 		lastCands  string
 		staticEP   = o.Device.Endpoint
 		peerByName = map[string]string{}
-		udpWorks   bool
+		stunCands  []netip.AddrPort // STUN-mapped addresses, at most one per family
 		trans      transport
 		hubs       = newHubPicker()
 		lastHubKey string
@@ -85,9 +85,19 @@ func Run(ctx context.Context, o Options) error {
 		}
 		if !haveNet || time.Since(lastSync) >= wait {
 			lastSync = time.Now()
-			cands, public, nat := gatherCandidates(ctx, dev, o.STUNServers, o.Device.ListenPort, netipCIDR(o.Device.NetworkCIDR))
+			var cands []string
+			var public netip.Addr
+			var nat string
+			cands, stunCands, public, nat = gatherCandidates(ctx, dev, o.STUNServers, o.Device.ListenPort, netipCIDR(o.Device.NetworkCIDR))
 			planner.MyPublic = public
-			udpWorks = public.IsValid()
+			local := localAddrs(dev.Name, netipCIDR(o.Device.NetworkCIDR))
+			planner.HaveV4, planner.HaveV6 = familiesOf(local)
+			planner.LocalV6 = planner.LocalV6[:0]
+			for _, a := range local {
+				if !a.Is4() {
+					planner.LocalV6 = append(planner.LocalV6, a)
+				}
+			}
 			if cands == nil {
 				cands = []string{}
 			}
@@ -169,14 +179,16 @@ func Run(ctx context.Context, o Options) error {
 				}
 				hub := peerByKey(resolved, hubKey)
 				var hubStat wg.PeerStat
-				hasRelay := hub != nil && hub.Relay != nil && len(hub.Candidates) > 0
+				var target netip.AddrPort // the address the planner dials for the hub
 				if hub != nil {
 					hubStat = stats[hub.PublicKey]
+					target = planner.HubTarget(*hub)
 				}
-				if trans.step(now, hasRelay, hubStat, udpWorks) {
+				hasRelay := hub != nil && hub.Relay != nil && target.IsValid()
+				if trans.step(now, hasRelay, hubStat, udpWorksTo(target, stunCands)) {
 					trans.toggle(now)
 					if trans.tcp {
-						if err := dev.UseTCPRelay(hub.Candidates[0], hub.Relay.Addr, hub.Relay.Fingerprint); err != nil {
+						if err := dev.UseTCPRelay(target, hub.Relay.Addr, hub.Relay.Fingerprint); err != nil {
 							return err
 						}
 						o.Logf("no UDP from the hub; tunnelling over TCP to %s", hub.Relay.Addr)
@@ -188,6 +200,11 @@ func Run(ctx context.Context, o Options) error {
 					}
 					if hub != nil {
 						planner.Kick(hub.PublicKey)
+					}
+				} else if trans.tcp && hasRelay {
+					// Follow the planner if the hub's address changed (no-op otherwise).
+					if err := dev.UseTCPRelay(target, hub.Relay.Addr, hub.Relay.Fingerprint); err != nil {
+						return err
 					}
 				}
 			}
@@ -260,47 +277,31 @@ func orNone(s string) string {
 	return s
 }
 
-// gatherCandidates asks STUN servers for WireGuard's public mapping and adds
-// local interface addresses for peers on the same LAN. If two servers see
-// different mapped ports the NAT is "symmetric" and direct punching will
-// usually fail, leaving the hub as the path.
-func gatherCandidates(ctx context.Context, dev *wg.Device, servers []string, port int, vpn netip.Prefix) (cands []string, public netip.Addr, nat string) {
-	var mapped []netip.AddrPort
-	for _, s := range servers {
-		addr, err := resolveUDP4(ctx, s)
-		if err != nil {
-			continue
-		}
-		ap, err := dev.STUN(ctx, addr, 1500*time.Millisecond)
-		if err != nil {
-			continue
-		}
-		mapped = append(mapped, ap)
+// gatherCandidates asks STUN servers for WireGuard's public mapping (over IPv4 and over IPv6, where the
+// host has that family) and adds local interface addresses for peers on the same LAN. If two servers see
+// different mapped ports within one family the NAT is "symmetric" and direct punching will usually
+// fail, leaving the hub as the path.
+func gatherCandidates(ctx context.Context, dev *wg.Device, servers []string, port int, vpn netip.Prefix) (cands []string, stunCands []netip.AddrPort, public netip.Addr, nat string) {
+	local := localAddrs(dev.Name, vpn)
+	haveV4, haveV6 := familiesOf(local) // only ask over a family this host has an address for: no waiting on a dead one
+	mapped := queryMapped(ctx, servers, haveV4, haveV6, lookupIP, func(ctx context.Context, server netip.AddrPort) (netip.AddrPort, error) {
+		return dev.STUN(ctx, server, 1500*time.Millisecond)
+	})
+	stunCands, public, nat = summariseMapped(mapped, localHas)
+	for _, ap := range stunCands {
+		cands = append(cands, ap.String())
 	}
-	nat = "unknown"
-	if len(mapped) > 0 {
-		public = mapped[0].Addr()
-		cands = append(cands, mapped[0].String())
-		nat = "easy"
-		for _, m := range mapped[1:] {
-			if m != mapped[0] {
-				nat = "symmetric (direct paths unlikely; using hub)"
-			}
-		}
-		if localHas(mapped[0].Addr()) {
-			nat = "none (public IP)"
+	// Drop local addresses STUN already reported (public IP) before sharing out the room.
+	var extra []netip.Addr
+	for _, a := range local {
+		if !slices.Contains(stunCands, netip.AddrPortFrom(a, uint16(port))) {
+			extra = append(extra, a)
 		}
 	}
-	for _, a := range localAddrs(dev.Name, vpn) {
-		ap := netip.AddrPortFrom(a, uint16(port)).String()
-		if !slices.Contains(cands, ap) {
-			cands = append(cands, ap)
-		}
-		if len(cands) >= 6 {
-			break
-		}
+	for _, a := range limitLocal(extra, maxCandidates-len(cands)) {
+		cands = append(cands, netip.AddrPortFrom(a, uint16(port)).String())
 	}
-	return cands, public, nat
+	return cands, stunCands, public, nat
 }
 
 func localHas(a netip.Addr) bool {
@@ -312,8 +313,8 @@ func localHas(a netip.Addr) bool {
 	return false
 }
 
-// localAddrs lists usable IPv4 addresses on up, non-loopback interfaces,
-// skipping our own tunnel and anything inside the VPN range.
+// localAddrs lists usable IPv4 and IPv6 addresses (global and unique-local, see usableLocal) on up,
+// non-loopback interfaces, skipping our own tunnel and anything inside the VPN range. IPv4 comes first.
 func localAddrs(skipIface string, vpn netip.Prefix) []netip.Addr {
 	ifs, err := net.Interfaces()
 	if err != nil {
@@ -335,7 +336,7 @@ func localAddrs(skipIface string, vpn netip.Prefix) []netip.Addr {
 				continue
 			}
 			ip = ip.Unmap()
-			if !ip.Is4() || ip.IsLinkLocalUnicast() || (vpn.IsValid() && vpn.Contains(ip)) {
+			if !usableLocal(ip, vpn) {
 				continue
 			}
 			out = append(out, ip)
@@ -345,27 +346,6 @@ func localAddrs(skipIface string, vpn netip.Prefix) []netip.Addr {
 	return out
 }
 
-func resolveUDP4(ctx context.Context, hostport string) (netip.AddrPort, error) {
-	if ap, err := netip.ParseAddrPort(hostport); err == nil {
-		return ap, nil
-	}
-	host, port, err := net.SplitHostPort(hostport)
-	if err != nil {
-		return netip.AddrPort{}, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
-	if err != nil || len(ips) == 0 {
-		return netip.AddrPort{}, fmt.Errorf("resolving %s: %v", host, err)
-	}
-	pn, err := net.LookupPort("udp", port)
-	if err != nil {
-		return netip.AddrPort{}, err
-	}
-	return netip.AddrPortFrom(ips[0].Unmap(), uint16(pn)), nil
-}
-
 // resolve turns peer endpoints into addresses; DNS names (static endpoints)
 // are looked up, failures are skipped.
 func resolve(ctx context.Context, peers []Peer) []ResolvedPeer {
@@ -373,8 +353,14 @@ func resolve(ctx context.Context, peers []Peer) []ResolvedPeer {
 	for _, p := range peers {
 		rp := ResolvedPeer{Peer: p}
 		for _, e := range p.Endpoints {
-			if ap, err := resolveUDP4(ctx, e); err == nil && !slices.Contains(rp.Candidates, ap) {
-				rp.Candidates = append(rp.Candidates, ap)
+			aps, err := resolveEndpoint(ctx, e, lookupIP)
+			if err != nil {
+				continue
+			}
+			for _, ap := range aps {
+				if !slices.Contains(rp.Candidates, ap) {
+					rp.Candidates = append(rp.Candidates, ap)
+				}
 			}
 		}
 		out = append(out, rp)
