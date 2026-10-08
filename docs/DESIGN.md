@@ -120,7 +120,7 @@ Bunny Storage HTTP API (`AccessKey` header), objects:
 
 ```
 devices/<id>.json        {id, name, publicKey, ip, endpoint, candidates, relay, hub, tokenHash, createdAt, lastSeen}
-setup-keys/<sha256>.json {id, hash, reusable, maxUses, uses, expiresAt, createdAt}
+setup-keys/<sha256>.json {id, hash, reusable, maxUses, uses, expiresAt, replace, createdAt}
 ```
 
 Notes:

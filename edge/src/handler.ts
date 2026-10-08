@@ -40,6 +40,12 @@ export interface SetupKey {
   expiresAt: number | null; // null = never
   /** Devices enrolled with this key lose access this long after joining. */
   deviceTtlSeconds?: number | null;
+  /**
+   * Enrolling with this key removes the existing devices of the same name and reuses the address of the
+   * newest one: a rebuilt machine keeps its VPN address. Whoever holds such a key can take over any
+   * existing name, so give it a short life.
+   */
+  replace?: boolean;
   createdAt: number;
 }
 
@@ -195,6 +201,7 @@ class Api {
     const ttl = body.ttlSeconds === 0 ? 0 : (optInt(body.ttlSeconds, "ttlSeconds", 60, MAX_KEY_TTL) ?? DEFAULT_KEY_TTL);
     const deviceTtl = optInt(body.deviceTtlSeconds, "deviceTtlSeconds", 60, MAX_DEVICE_TTL) ?? null;
     const maxUses = optInt(body.maxUses, "maxUses", 0, 100000) ?? (reusable ? 0 : 1);
+    const replace = optBool(body.replace, "replace") ?? false;
     if (!reusable && maxUses !== 1) throw new HttpError(400, "one-time keys have maxUses 1");
 
     const key = randomToken("vbk_");
@@ -208,6 +215,7 @@ class Api {
       uses: 0,
       expiresAt: ttl === 0 ? null : t + ttl * 1000,
       deviceTtlSeconds: deviceTtl,
+      replace,
       createdAt: t,
     };
     await this.store.put(`setup-keys/${hash}.json`, rec);
@@ -271,7 +279,18 @@ class Api {
     if (devices.some((d) => d.publicKey === publicKey)) {
       throw new HttpError(409, "a device with this public key already exists");
     }
-    const ip = allocate(this.cidr, new Set(devices.map((d) => d.ip)), await sha256Hex(publicKey));
+    // A replace key swaps the devices of the same name: the newest one's address is kept, so a rebuilt
+    // machine keeps its VPN address. The old devices are removed first, so peers never see one address twice.
+    const sameName = setupKey.replace ? devices.filter((d) => d.name === name) : [];
+    let ip: string | null;
+    if (sameName.length > 0) {
+      ip = sameName.reduce((a, b) => (b.createdAt >= a.createdAt ? b : a)).ip;
+      for (const d of sameName) await this.store.delete(`devices/${d.id}.json`);
+    } else {
+      // The search starts at a position derived from the name, so the same name gets the same address
+      // while it is free (also after the old device was removed or expired).
+      ip = allocate(this.cidr, new Set(devices.map((d) => d.ip)), await sha256Hex(name));
+    }
     if (!ip) throw new HttpError(507, "network is full");
 
     const id = randomId();
@@ -408,6 +427,7 @@ function publicKey(k: SetupKey) {
     uses: k.uses,
     expiresAt: iso(k.expiresAt),
     deviceTtlSeconds: k.deviceTtlSeconds ?? null,
+    replace: k.replace === true,
     createdAt: new Date(k.createdAt).toISOString(),
   };
 }

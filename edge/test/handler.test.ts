@@ -259,3 +259,130 @@ describe("optEndpoint", () => {
     }
   });
 });
+
+describe("same name, same address", () => {
+  async function key(call: any, body: object = {}) {
+    const r = await call("POST", "/api/v1/setup-keys", body, ADMIN);
+    expect(r.status).toBe(201);
+    return r.body.key as string;
+  }
+  async function join(call: any, k: string, name: string, publicKey: string) {
+    const r = await call("POST", "/api/v1/enroll", { setupKey: k, name, publicKey });
+    expect(r.status).toBe(201);
+    return r.body;
+  }
+  const devices = async (call: any) => (await call("GET", "/api/v1/devices", undefined, ADMIN)).body.devices as any[];
+
+  test("a replace key swaps the device of the same name and keeps its address", async () => {
+    const { call } = await setup();
+    const old = await join(call, await key(call), "db", KEY1);
+    await join(call, await key(call), "web", KEY2);
+    const fresh = await join(call, await key(call, { replace: true }), "db", KEY3);
+    expect(fresh.device.ip).toBe(old.device.ip);
+    expect(fresh.device.hub).toBe(false);
+    const list = await devices(call);
+    expect(list.map((d) => d.name).sort()).toEqual(["db", "web"]);
+    expect(list.find((d) => d.name === "db").id).toBe(fresh.device.id);
+    // the old device lost access, the new one works
+    expect((await call("POST", "/api/v1/sync", {}, old.deviceToken)).status).toBe(401);
+    expect((await call("POST", "/api/v1/sync", {}, fresh.deviceToken)).status).toBe(200);
+  });
+
+  test("a replacing device is not a hub, even if the old one was", async () => {
+    const { call } = await setup();
+    const old = await join(call, await key(call), "hub1", KEY1);
+    await call("POST", "/api/v1/sync", { endpoint: "203.0.113.5:51820" }, old.deviceToken);
+    expect((await call("PATCH", `/api/v1/devices/${old.device.id}`, { hub: true }, ADMIN)).status).toBe(200);
+    const fresh = await join(call, await key(call, { replace: true }), "hub1", KEY2);
+    expect(fresh.device.ip).toBe(old.device.ip);
+    expect(fresh.device.hub).toBe(false);
+  });
+
+  test("a key without replace leaves the old device alone (both are listed, different addresses)", async () => {
+    const { call } = await setup();
+    const a = await join(call, await key(call), "db", KEY1);
+    const b = await join(call, await key(call), "db", KEY2);
+    expect(b.device.ip).not.toBe(a.device.ip);
+    expect((await devices(call)).filter((d) => d.name === "db")).toHaveLength(2);
+    expect((await call("POST", "/api/v1/sync", {}, a.deviceToken)).status).toBe(200);
+  });
+
+  test("replace with several devices of that name: all go, the newest address is kept", async () => {
+    const { call, now } = await setup();
+    await join(call, await key(call), "db", KEY1);
+    now.t += 60_000;
+    const newest = await join(call, await key(call), "db", KEY2);
+    now.t += 60_000;
+    const fresh = await join(call, await key(call, { replace: true }), "db", KEY3);
+    expect(fresh.device.ip).toBe(newest.device.ip);
+    expect((await devices(call)).filter((d) => d.name === "db")).toHaveLength(1);
+  });
+
+  test("replace on a name nobody has behaves like a normal enrollment", async () => {
+    const { call } = await setup();
+    const d = await join(call, await key(call, { replace: true }), "new", KEY1);
+    expect(d.device.ip).toMatch(/^100\.92\.0\.\d+$/);
+    expect(await devices(call)).toHaveLength(1);
+  });
+
+  test("the same public key under another name is still refused", async () => {
+    const { call } = await setup();
+    await join(call, await key(call), "a", KEY1);
+    const k = await key(call, { replace: true });
+    expect((await call("POST", "/api/v1/enroll", { setupKey: k, name: "b", publicKey: KEY1 })).status).toBe(409);
+  });
+
+  test("the address follows the name: same name on a fresh network, same address", async () => {
+    const one = await setup();
+    const two = await setup();
+    const a = await join(one.call, await key(one.call), "gateway", KEY1);
+    const b = await join(two.call, await key(two.call), "gateway", KEY2);
+    expect(b.device.ip).toBe(a.device.ip);
+    const c = await join(one.call, await key(one.call), "other", KEY3);
+    expect(c.device.ip).not.toBe(a.device.ip);
+  });
+
+  test("an address survives a removal: remove, enroll again with the same name, same address", async () => {
+    const { call } = await setup();
+    const a = await join(call, await key(call), "db", KEY1);
+    await call("DELETE", `/api/v1/devices/${a.device.id}`, undefined, ADMIN);
+    const b = await join(call, await key(call), "db", KEY2);
+    expect(b.device.ip).toBe(a.device.ip);
+  });
+
+  test("replace is a key property: shown in the list, ignored on enrollment, must be a boolean", async () => {
+    const { call } = await setup();
+    const k = await call("POST", "/api/v1/setup-keys", { replace: true }, ADMIN);
+    expect(k.body.replace).toBe(true);
+    const plain = await call("POST", "/api/v1/setup-keys", {}, ADMIN);
+    expect(plain.body.replace).toBe(false);
+    const list = (await call("GET", "/api/v1/setup-keys", undefined, ADMIN)).body.setupKeys;
+    expect(list.map((x: any) => x.replace).sort()).toEqual([false, true]);
+    expect((await call("POST", "/api/v1/setup-keys", { replace: "yes" }, ADMIN)).status).toBe(400);
+    // a device cannot ask for replacement in the enroll body
+    const a = await join(call, await key(call), "db", KEY1);
+    const b = await call("POST", "/api/v1/enroll", { setupKey: await key(call), name: "db", publicKey: KEY2, replace: true });
+    expect(b.status).toBe(201);
+    expect(b.body.device.ip).not.toBe(a.device.ip);
+  });
+
+  test("probing still works when the preferred address is taken (small network)", async () => {
+    const store = new MemoryStore();
+    const h = createHandler(store, { adminTokenSha256: await sha256Hex(ADMIN), networkCidr: "100.92.0.0/29", networkName: "tiny" });
+    const post = async (path: string, body: object, token?: string) => {
+      const res = await h(new Request(`https://net.example${path}`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: JSON.stringify(body) }));
+      return { status: res.status, body: (await res.json()) as any };
+    };
+    const ips = new Set<string>();
+    for (let i = 0; i < 6; i++) {
+      const k = (await post("/api/v1/setup-keys", {}, ADMIN)).body.key;
+      const key = Buffer.alloc(32, i + 1).toString("base64");
+      const r = await post("/api/v1/enroll", { setupKey: k, name: `n${i}`, publicKey: key });
+      expect(r.status).toBe(201);
+      ips.add(r.body.device.ip);
+    }
+    expect(ips.size).toBe(6); // /29 has 6 host addresses, all different
+    const k = (await post("/api/v1/setup-keys", {}, ADMIN)).body.key;
+    expect((await post("/api/v1/enroll", { setupKey: k, name: "n7", publicKey: Buffer.alloc(32, 9).toString("base64") })).status).toBe(507);
+  });
+});

@@ -89,6 +89,7 @@ vabbit keys create                         # one machine, key valid 24h
 vabbit keys create --reusable --max-uses 5 # up to 5 machines
 vabbit keys create --reusable --ttl never  # e.g. baked into VM images
 vabbit keys create --device-ttl 7d         # machines joined with it are cut off after 7 days
+vabbit keys create --replace --ttl 1h      # a rebuilt machine takes over its old name and address
 vabbit keys rm <id>                        # no new machines can join with it
 vabbit devices ls
 vabbit devices set <id> --expires 3d       # give a machine an end date (or: never)
@@ -120,6 +121,9 @@ out of every peer list at once, and its own agent shuts its interface down.
 | `--max-uses N` | `0` (unlimited) | Limit how often a reusable key can be used. |
 | `--ttl DURATION` | `24h` | How long the key can be used, e.g. `2h`, `7d` or `never`. |
 | `--device-ttl DURATION` | `never` | Devices enrolled with this key lose access this long after joining, e.g. `7d`. |
+| `--replace` | off | A device that joins with this key removes the existing device of the **same name** and takes over its VPN address. For machines that are deleted and rebuilt. |
+
+**Rebuilding a machine.** A VPN address is chosen from the device name, so a name that is free again gets the same address. If the old device is still listed, join the rebuilt machine with a `--replace` key: the old entry (and its token) is removed and the address stays. The new device is never a hub, even if the old one was; mark it again with `vabbit devices set <id> --hub=true`. Whoever holds a `--replace` key can take over any existing name, so create it with a short `--ttl` and, for one machine, without `--reusable`.
 
 **`vabbit devices set ID`**
 
