@@ -101,9 +101,20 @@ agent() { # ns, extra args...
 
 ipof() { x hub "$EG" devices ls | awk -v n="$1" '$2==n{print $3}'; }
 
+# In GitHub Actions, also report a failure as an annotation with the end of each
+# agent log, since annotations can be read through the API when job logs can't.
+annotate() { # message
+  [ -n "${GITHUB_ACTIONS:-}" ] || return 0
+  local body f
+  body="$1"
+  for f in "$W"/*.log; do [ -f "$f" ] && body="$body"$'\n'"== ${f##*/}"$'\n'"$(tail -n 25 "$f")"; done
+  body=${body//'%'/'%25'}; body=${body//$'\r'/'%0D'}; body=${body//$'\n'/'%0A'}
+  echo "::error title=e2e ${mode:-}::$body"
+}
+
 wait_for() { # ns pattern seconds
   for _ in $(seq "$3"); do grep -q "$2" "$W/$1.log" && return 0; sleep 1; done
-  echo "FAIL: $1 never logged '$2'"; tail -n +1 "$W"/*.log
+  echo "FAIL: $1 never logged '$2'"; tail -n +1 "$W"/*.log; annotate "$1 never logged '$2'"
   if [ -n "${DEBUG:-}" ]; then
     for n in natA natB; do echo "== conntrack $n"; x $n cat /proc/net/nf_conntrack 2>/dev/null | grep udp || x $n conntrack -L 2>/dev/null; done
     for n in lap phone; do echo "== $n"; x $n wg show "eg$n" 2>/dev/null || true; done
@@ -113,7 +124,7 @@ wait_for() { # ns pattern seconds
 
 check() { # description, command...
   local d=$1; shift
-  if "$@" >/dev/null 2>&1; then echo "ok   $d"; else echo "FAIL $d"; tail -n +1 "$W"/*.log; [ -n "${KEEP:-}" ] && sleep 300; exit 1; fi
+  if "$@" >/dev/null 2>&1; then echo "ok   $d"; else echo "FAIL $d"; tail -n +1 "$W"/*.log; annotate "FAIL $d"; [ -n "${KEEP:-}" ] && sleep 300; exit 1; fi
 }
 
 status() { x "$1" env SSL_CERT_FILE="$SSL_CERT_FILE" "$EG" status --iface "eg$1" --state-dir "$W/s-$1"; }
