@@ -83,7 +83,10 @@ curl -fsSL https://raw.githubusercontent.com/thomaskhub/vabbit/main/scripts/inst
 
 Releases: pushing a `v*` tag runs `.github/workflows/release.yml` (client linux
 amd64/arm64 with `-X main.version`, vabbit-deploy linux+darwin, unit file, install.sh,
-SHA256SUMS, `gh release create --generate-notes`). No tag has been pushed yet.
+SHA256SUMS, `gh release create --generate-notes`). Tags with a suffix (`-rc.1`) become
+pre-releases. The workflow can also be run by hand with a `tag` input, which creates the tag;
+agent sessions use that (`POST /repos/thomaskhub/vabbit/actions/workflows/release.yml/dispatches`)
+because they can't push tags. Published so far: `v0.1.0-rc.1` (pre-release).
 
 ## Working on the code
 

@@ -292,7 +292,7 @@ echo vba_... | vabbit login --server http://127.0.0.1:8787   # token from vabbit
 sudo vabbit up --dry-run                 # syncs once and prints the peers instead of starting
 ```
 
-To publish a release, push a tag such as `v0.1.0`: [release.yml](.github/workflows/release.yml)
+To publish a release, push a tag such as `v0.1.0` (or run the workflow by hand with that tag): [release.yml](.github/workflows/release.yml)
 builds the client (Linux amd64/arm64), `vabbit-deploy` (Linux and macOS), the systemd
 unit, `install.sh` and `SHA256SUMS`, and attaches them to a GitHub release.
 
