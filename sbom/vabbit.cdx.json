@@ -144,10 +144,6 @@
         {
           "name": "cdx:gomod:build:env:GOOS",
           "value": "linux"
-        },
-        {
-          "name": "cdx:gomod:build:env:GOVERSION",
-          "value": "go1.24.7"
         }
       ],
       "purl": "pkg:golang/vabbit@source?type=module&goos=linux&goarch=amd64#cmd/vabbit",

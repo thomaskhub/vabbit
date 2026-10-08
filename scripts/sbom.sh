@@ -12,7 +12,9 @@ cd "$(dirname "$0")/.."
 GOMOD=${CYCLONEDX_GOMOD:-cyclonedx-gomod}
 # License detection mislabels golang.org/x (the Go project's BSD-3-Clause license).
 strip() {
+  # GOVERSION is whichever Go built the SBOM, not something the binary depends on.
   jq -S 'del(.metadata.timestamp, .serialNumber, .metadata.tools)
+    | .metadata.component.properties |= map(select(.name != "cdx:gomod:build:env:GOVERSION"))
     | .components |= map(if (.name | startswith("golang.org/x/")) then .evidence.licenses = [{license: {id: "BSD-3-Clause"}}] else . end)' >"$1"
 }
 
