@@ -30,7 +30,9 @@ const usage = `vabbit-deploy: run Vabbit networks on bunny.net from a config fil
   vabbit-deploy status               show each network's URL and health
   vabbit-deploy rotate-admin -n NAME replace a network's admin token
                                      (apply/rotate-admin --login: save a new token
-                                     straight into your encrypted vabbit login)
+                                     straight into your encrypted vabbit login;
+                                     --admin-login-file F: into an encrypted file
+                                     to share with other admins)
   vabbit-deploy destroy -n NAME      delete a network's edge script and storage
 
 Common flags: -f FILE (default vabbit.toml), -n NAME (only this network).
@@ -153,13 +155,17 @@ func cmdApply(ctx context.Context, args []string, dry bool) error {
 	tokenFile := fs.String("admin-token-file", "", "also append newly generated admin tokens to this file (mode 0600), for vabbit login --token-file")
 	noWait := fs.Bool("no-wait", false, "don't wait for the network to answer after publishing")
 	login := fs.Bool("login", false, "save a newly generated admin token straight into your vabbit admin login (encrypted with your master password) instead of printing it")
+	loginFile := fs.String("admin-login-file", "", "write a newly generated admin token to this new file as an encrypted vabbit admin login, to share with other admins")
 	fs.Parse(args)
 	f, nets, client, err := c.load()
 	if err != nil {
 		return err
 	}
-	if *login && len(nets) != 1 {
-		return errors.New("--login needs a single network (-n NAME): vabbit keeps one admin login per machine")
+	if (*login || *loginFile != "") && len(nets) != 1 {
+		return errors.New("--login and --admin-login-file need a single network (-n NAME): a vabbit admin login holds one network")
+	}
+	if *login && *loginFile != "" {
+		return errors.New("use --login or --admin-login-file, not both")
 	}
 	code, err := scriptCode(f, c.script)
 	if err != nil {
@@ -185,8 +191,8 @@ func cmdApply(ctx context.Context, args []string, dry bool) error {
 					return err
 				}
 			}
-			if *login {
-				if err := vabbitLogin(n.Name, res.URL, res.AdminToken); err == nil {
+			if *login || *loginFile != "" {
+				if err := vabbitLogin(n.Name, res.URL, res.AdminToken, *loginFile); err == nil {
 					continue
 				} else {
 					fmt.Fprintf(os.Stderr, "  vabbit login failed (%v); the token follows so it isn't lost\n", err)
@@ -227,7 +233,11 @@ func cmdRotate(ctx context.Context, args []string) error {
 	c := commonFlags(fs)
 	tokenFile := fs.String("admin-token-file", "", "also append the new token to this file (mode 0600), for vabbit login --token-file")
 	login := fs.Bool("login", false, "save the new token straight into your vabbit admin login (encrypted with your master password) instead of printing it")
+	loginFile := fs.String("admin-login-file", "", "write the new token to this new file as an encrypted vabbit admin login, to share with other admins")
 	fs.Parse(args)
+	if *login && *loginFile != "" {
+		return errors.New("use --login or --admin-login-file, not both")
+	}
 	if c.network == "" {
 		return errors.New("rotate-admin needs -n NETWORK")
 	}
@@ -245,8 +255,8 @@ func cmdRotate(ctx context.Context, args []string) error {
 		}
 	}
 	saved := false
-	if *login {
-		if err := vabbitLogin(nets[0].Name, url, tok); err != nil {
+	if *login || *loginFile != "" {
+		if err := vabbitLogin(nets[0].Name, url, tok, *loginFile); err != nil {
 			fmt.Fprintf(os.Stderr, "vabbit login failed (%v); the token follows so it isn't lost\n", err)
 		} else {
 			saved = true
@@ -333,9 +343,10 @@ func appendSecret(path, line string) error {
 }
 
 // vabbitLogin hands a new admin token to `vabbit login` on stdin, so it is
-// stored encrypted with the admin's master password and never touches disk in
-// clear. It uses the vabbit binary next to this one, or the one on PATH.
-func vabbitLogin(network, url, token string) error {
+// stored encrypted with a master password and never touches disk in clear:
+// in the caller's own login, or in a new file to share when out is set. It
+// uses the vabbit binary next to this one, or the one on PATH.
+func vabbitLogin(network, url, token, out string) error {
 	if url == "" {
 		return errors.New("the network has no URL yet")
 	}
@@ -349,8 +360,14 @@ func vabbitLogin(network, url, token string) error {
 	if err != nil {
 		return fmt.Errorf("vabbit not found next to vabbit-deploy or on PATH: %w", err)
 	}
-	fmt.Printf("  saving the admin token for %s into your vabbit login\n", network)
-	cmd := exec.Command(path, "login", "--server", url, "--token-file", "-")
+	args := []string{"login", "--server", url, "--token-file", "-"}
+	if out != "" {
+		args = append(args, "--out", out)
+		fmt.Printf("  saving the admin token for %s as an encrypted login in %s\n", network, out)
+	} else {
+		fmt.Printf("  saving the admin token for %s into your vabbit login\n", network)
+	}
+	cmd := exec.Command(path, args...)
 	cmd.Stdin = strings.NewReader(token + "\n")
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()

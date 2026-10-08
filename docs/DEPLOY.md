@@ -78,7 +78,10 @@ Every command exits non-zero on failure, so it fits in shell scripts and pipelin
 Admin tokens are printed once, by the `apply` that creates a network and by
 `rotate-admin`. If you are the admin, pass `--login` (with `-n NAME`) instead: the token
 goes straight into `vabbit login`, encrypted with your master password, and is never
-printed. To hand it to someone else, pass `--admin-token-file FILE`: the file is created
+printed. For a team of admins, `--admin-login-file FILE` writes it into a new file as an
+encrypted admin login to share (with the master password sent separately); each admin
+copies it to `~/.config/vabbit/admin.json` (mode 0600). To hand over the plain token
+instead, pass `--admin-token-file FILE`: the file is created
 (mode 0600) if missing and gets one `NETWORK URL TOKEN` line per new token. The admin
 then logs in with `vabbit login --token-file FILE`. `--no-wait` skips the health check after publishing.
 

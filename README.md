@@ -50,15 +50,21 @@ a network (later runs keep the existing token and print nothing).
   `vabbit login`, which asks for your master password and stores it encrypted. The
   token is never shown or written in clear. Needs `vabbit` next to `vabbit-deploy` or
   on `PATH`.
-* **Someone else is the admin:** `apply` prints the token once on screen, and
+* **A team of admins:** `apply -n NAME --admin-login-file team-admin.json` writes the
+  token into a new file as an encrypted admin login, asking for a master password. Share
+  the file over any channel and the password separately (e.g. a team password manager).
+  Each admin installs it with
+  `mkdir -p ~/.config/vabbit && install -m 600 team-admin.json ~/.config/vabbit/admin.json`.
+  Everyone shares one token: to remove someone, `rotate-admin` and share a new file.
+* **Someone else is the admin, in clear:** `apply` prints the token once on screen, and
   `--admin-token-file admin-tokens.txt` also appends it to that file, which `apply`
   creates for you (mode 0600). Each line is `NETWORK URL TOKEN`:
   ```
   home https://vabbit-home.b-cdn.net vba_3kX…
   ```
-  `rotate-admin` takes `--login` and `--admin-token-file` the same way.
+  `rotate-admin` takes `--login`, `--admin-login-file` and `--admin-token-file` the same way.
 
-In the second case, give the token (or the file) to the admin over a secure channel,
+In the last case, give the token (or the file) to the admin over a secure channel,
 then delete your copy.
 The admin logs in with `vabbit login --token-file admin-tokens.txt`, or pastes the token
 into `vabbit login --server URL`. A lost token can't be recovered; make a new one with
@@ -81,6 +87,7 @@ into `vabbit login --server URL`. A lost token can't be recovered; make a new on
 | `--allow-cidr-change` | plan, apply | off | Allow changing a network's CIDR. Every enrolled device must re-enroll. |
 | `--admin-token-file FILE` | apply, rotate-admin | | Also append new admin tokens to this file (mode 0600) as `NETWORK URL TOKEN` lines, for `vabbit login --token-file`. |
 | `--login` | apply, rotate-admin | off | Save a new admin token straight into your `vabbit login` (encrypted with your master password) instead of printing it. Needs a single network (`-n`). |
+| `--admin-login-file FILE` | apply, rotate-admin | | Write a new admin token into this new file as an encrypted admin login (asks for a master password), to share with other admins. Needs a single network (`-n`). |
 | `--no-wait` | apply | off | Don't wait for the network to answer after publishing. |
 | `--yes` | destroy | off | Don't ask for confirmation. |
 
@@ -149,6 +156,7 @@ vabbit devices rm <id>                 # cut off on its next sync (≤15s)
 | `--server URL` | | Control plane URL, e.g. `https://mynet.b-cdn.net`. |
 | `--token TOKEN` | prompted | Admin token (`vba_…`). Leave it out to be prompted, so it stays out of shell history. |
 | `--no-password` | off | Store the token unencrypted, for unattended machines without anyone to type a password. |
+| `--out FILE` | | Write the encrypted login to this new file to share with other admins, instead of logging in on this machine. |
 | `--token-file FILE` | | Read the token from a file (mode 0600), or `-` for stdin: just the token, or the lines `vabbit-deploy --admin-token-file` writes. Then the newest token for `--server` is used, and `--server` can be left out if the file names one network. |
 
 **`vabbit keys create`**

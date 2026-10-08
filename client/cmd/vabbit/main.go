@@ -15,6 +15,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,7 +37,7 @@ const usage = `vabbit - tiny WireGuard networks managed from a Bunny Edge Script
 
 Admin:
   vabbit admin-token                       generate an admin token and its SHA-256 for the edge script
-  vabbit login --server URL [--token T | --token-file F] [--no-password]
+  vabbit login --server URL [--token T | --token-file F] [--no-password | --out FILE]
                                            save admin credentials, encrypted with a master password
   vabbit logout
   vabbit keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
@@ -119,7 +120,16 @@ func cmdLogin(ctx context.Context, args []string) error {
 	token := fs.String("token", "", "admin token (prompted if omitted)")
 	tokenFile := fs.String("token-file", "", "read the admin token from this file (mode 0600), or - for stdin: just the token, or the file vabbit-deploy --admin-token-file writes")
 	noPassword := fs.Bool("no-password", false, "store the token unencrypted (for unattended machines); default: protect it with a master password")
+	out := fs.String("out", "", "write the encrypted login to this new file to share with other admins, instead of logging in here")
 	fs.Parse(args)
+	if *out != "" {
+		if *noPassword {
+			return errors.New("--out always encrypts; a shared login must have a master password")
+		}
+		if _, err := os.Lstat(*out); err == nil {
+			return fmt.Errorf("%s already exists; remove it first", *out)
+		}
+	}
 	if *tokenFile != "" {
 		if *token != "" {
 			return errors.New("use --token or --token-file, not both")
@@ -151,9 +161,11 @@ func cmdLogin(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("login failed: %w", err)
 	}
-	path, err := state.AdminPath()
-	if err != nil {
-		return err
+	path := *out
+	if path == "" {
+		if path, err = state.AdminPath(); err != nil {
+			return err
+		}
 	}
 	var pw []byte
 	if !*noPassword {
@@ -163,6 +175,12 @@ func cmdLogin(ctx context.Context, args []string) error {
 	}
 	if err := state.SaveAdmin(path, state.Admin{Server: base, Token: *token}, pw); err != nil {
 		return err
+	}
+	if *out != "" {
+		fmt.Printf("Saved the admin login for network %q to %s, encrypted with the master password.\n", n.Name, path)
+		fmt.Printf("Share the file and, separately, the password. Each admin installs it with:\n")
+		fmt.Printf("  mkdir -p ~/.config/vabbit && install -m 600 %s ~/.config/vabbit/admin.json\n", filepath.Base(path))
+		return nil
 	}
 	how := "encrypted with your master password"
 	if *noPassword {
