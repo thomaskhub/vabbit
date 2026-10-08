@@ -151,11 +151,15 @@ Notes:
 ## Names
 
 The agent writes `<address> <name>.<domain>` for every device (and itself) into a managed block of
-`/etc/hosts` after each good sync, and removes the block when it stops. The write is in place, not a
-temporary file and a rename: `/etc/hosts` is a bind mount in containers and the service sandbox
-(`ProtectSystem=strict`) only opens that one path. Only qualified names are written, so a device cannot
-shadow a local name by choosing it; invalid names are skipped. An unterminated block makes the write fail
-instead of guessing which lines are ours.
+`/etc/hosts` after each good sync (nothing is written when the block is already right, and a block
+someone else removed comes back), and removes the block when it stops. Writers take an flock on the
+file, so agents for several interfaces don't lose each other's block. The new file is written next to
+it, synced and renamed over it; where that fails (`/etc/hosts` is a bind mount in containers, and the
+service sandbox, `ProtectSystem=strict`, opens only that one path) it is rewritten in place. The
+device's own name is the one the server sends, so an admin rename shows up. Only qualified names are
+written, so a device cannot shadow a local name by choosing it; invalid names are skipped, and domains
+that already mean something (`com`, `local`, `lan`, ...) are refused. An unterminated block makes the
+write fail (logged once) instead of guessing which lines are ours.
 
 ## Not in v1
 

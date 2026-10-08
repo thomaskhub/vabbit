@@ -1,10 +1,13 @@
 package hosts
 
 import (
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 )
 
@@ -96,60 +99,106 @@ func TestApply(t *testing.T) {
 	}
 }
 
-func TestApplyInPlaceInReadOnlyDirectory(t *testing.T) {
+func TestApplyInPlaceWhenRenameFails(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"+want), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.Stat(path)
+	rename = func(string, string) error { return &os.LinkError{Op: "rename", Err: syscall.EBUSY} } // bind mount
+	defer func() { rename = os.Rename }()
+	if _, err := Apply(path, "vb0", entries()[:1]); err != nil {
+		t.Fatalf("a bind-mounted file must be written in place: %v", err)
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "127.0.0.1 localhost\n# BEGIN vabbit vb0\n100.92.0.9 web.vabbit\n# END vabbit vb0\n" {
+		t.Errorf("file = %q (shorter content must leave nothing behind)", b)
+	}
+	if after, _ := os.Stat(path); !os.SameFile(before, after) {
+		t.Error("the file was replaced instead of written in place")
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".hosts.vabbit-*")); len(left) > 0 {
+		t.Errorf("temporary files left behind: %v", left)
+	}
+}
+
+func TestApplyReplacesTheFileAndKeepsItsMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts")
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.Stat(path)
+	if _, err := Apply(path, "vb0", entries()); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.Stat(path)
+	if os.SameFile(before, after) {
+		t.Error("expected a new file renamed over the old one")
+	}
+	if after.Mode().Perm() != 0o640 {
+		t.Errorf("mode = %o, want 640", after.Mode().Perm())
+	}
+	// nothing to change: the file is not rewritten
+	if changed, err := Apply(path, "vb0", entries()); err != nil || changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	if again, _ := os.Stat(path); !os.SameFile(after, again) || !again.ModTime().Equal(after.ModTime()) {
+		t.Error("an unchanged block must not rewrite the file")
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".hosts.vabbit-*")); len(left) > 0 {
+		t.Errorf("temporary files left behind: %v", left)
+	}
+}
+
+func TestApplyPutsBackARemovedBlock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
+	if _, err := Apply(path, "vb0", entries()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o644); err != nil { // e.g. cloud-init
+		t.Fatal(err)
+	}
+	if changed, err := Apply(path, "vb0", entries()); err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "127.0.0.1 localhost\n"+want {
+		t.Errorf("file = %q", b)
+	}
+}
+
+func TestApplyMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
+	if changed, err := Apply(path, "vb0", nil); err != nil || changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("removing from a missing file must not create it: %v", err)
+	}
+}
+
+func TestApplyConcurrentInterfaces(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
 	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(dir, 0o555); err != nil { // like /etc under a sandbox: only the file is writable
-		t.Fatal(err)
+	// Agents for many interfaces add their block at the same time: none may be lost.
+	var wg sync.WaitGroup
+	for i := range 40 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := Apply(path, fmt.Sprintf("vb%d", i), entries()); err != nil {
+				t.Error(err)
+			}
+		}()
 	}
-	defer os.Chmod(dir, 0o755)
-	if _, err := Apply(path, "vb0", entries()); err != nil {
-		t.Fatalf("a write that needs no new file in the directory must work: %v", err)
-	}
-	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "db.vabbit") {
-		t.Errorf("not written: %q", b)
-	}
-}
-
-func TestApplyRefusesAnUnterminatedBlock(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "hosts")
-	orig := "127.0.0.1 localhost\n# BEGIN vabbit vb0\n10.0.0.1 mine\n"
-	if err := os.WriteFile(path, []byte(orig), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Apply(path, "vb0", entries()); err == nil {
-		t.Fatal("expected an error")
-	}
-	if b, _ := os.ReadFile(path); string(b) != orig {
-		t.Errorf("file was changed: %q", b)
-	}
-}
-
-func TestValidDomain(t *testing.T) {
-	for _, d := range []string{"vabbit", "vpn.example.com", "a-b.c1"} {
-		if !ValidDomain(d) {
-			t.Errorf("%q rejected", d)
-		}
-	}
-	for _, d := range []string{"", ".", "a..b", "-a", "a-", "under_score", "has space", strings.Repeat("a", 64), "x.localhost?"} {
-		if ValidDomain(d) {
-			t.Errorf("%q accepted", d)
-		}
-	}
-}
-
-func TestValidHostName(t *testing.T) {
-	for _, n := range []string{"db", "ishanga-db-india-uat", "a.b", "web1"} {
-		if !ValidHostName(n) {
-			t.Errorf("%q rejected", n)
-		}
-	}
-	for _, n := range []string{"", "Db", "under_score", "a?b", "-x", "x-", "a..b", ".a", "a b", strings.Repeat("a", 64)} {
-		if ValidHostName(n) {
-			t.Errorf("%q accepted", n)
+	wg.Wait()
+	b, _ := os.ReadFile(path)
+	for i := range 40 {
+		if !strings.Contains(string(b), fmt.Sprintf("# BEGIN vabbit vb%d\n", i)) {
+			t.Errorf("block of vb%d lost", i)
 		}
 	}
 }

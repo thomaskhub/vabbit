@@ -64,6 +64,10 @@ func TestEffectiveDomain(t *testing.T) {
 		{"vpn.example.com", "vpn.example.com", true},
 		{"none", "", true},
 		{"Bad_Domain", "", false},
+		{"com", "", false},
+		{"local", "", false},
+		{"lan", "", false},
+		{"corp", "corp", true},
 	} {
 		got, err := EffectiveDomain(tc.stored)
 		if (err == nil) != tc.ok || got != tc.want {

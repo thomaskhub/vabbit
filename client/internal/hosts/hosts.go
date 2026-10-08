@@ -5,10 +5,13 @@ package hosts
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 )
 
 // DefaultFile is the system hosts file.
@@ -89,36 +92,161 @@ func Replace(content, iface, block string) (string, error) {
 	return strings.Join(out, "\n") + "\n", nil
 }
 
-// Apply writes the block of iface into the file at path, in place, and reports whether the file
-// changed. It does not create a temporary file and rename it: /etc/hosts is a bind mount in
-// containers, and a sandboxed service may be allowed to write that one file but not its directory.
-// The new content is written from the start of the file before it is cut to its length, so readers
-// never see an empty file.
+// Apply writes the block of iface into the file at path and reports whether the file changed. It
+// reads the file on every call and writes nothing when the content is already right, so it can run
+// after every sync and puts back a block that someone else removed.
+//
+// Writers are serialized with flock on the file itself, so agents for different interfaces don't lose
+// each other's block. The lock is taken on the file that is at path once the lock is held: a writer
+// that renamed a new file over it in the meantime is waited for.
+//
+// The new content goes to a temporary file in the same directory that is synced and renamed over path,
+// with the old mode and owner, so a crash leaves either the old or the new file. When that is not
+// possible (a bind-mounted /etc/hosts in a container gives EBUSY, the service sandbox makes /etc
+// read-only and only opens the file itself), the file is rewritten in place; see writeInPlace.
 func Apply(path, iface string, entries []Entry) (bool, error) {
-	cur, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	block := Block(iface, entries)
+	f, err := lockFile(path, block != "")
+	if err != nil || f == nil {
+		return false, err // f == nil: there is no file and nothing to write
+	}
+	defer f.Close() // also releases the lock
+	cur, err := io.ReadAll(f)
+	if err != nil {
 		return false, err
 	}
-	next, err := Replace(string(cur), iface, Block(iface, entries))
+	next, err := Replace(string(cur), iface, block)
 	if err != nil {
 		return false, err
 	}
 	if next == string(cur) {
 		return false, nil
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0o644)
+	fi, err := f.Stat()
 	if err != nil {
 		return false, err
 	}
-	if _, err := f.WriteAt([]byte(next), 0); err != nil {
-		f.Close()
+	err = replaceFile(path, fi, []byte(next))
+	if err == nil {
+		return true, nil
+	}
+	if !canNotReplace(err) {
 		return false, err
 	}
-	if err := f.Truncate(int64(len(next))); err != nil {
+	return true, writeInPlace(path, []byte(next))
+}
+
+// lockFile opens path and takes an exclusive flock on it. A missing file is created when create is
+// set; otherwise lockFile returns nil and no error.
+func lockFile(path string, create bool) (*os.File, error) {
+	for {
+		f, err := os.Open(path)
+		if errors.Is(err, os.ErrNotExist) {
+			if !create {
+				return nil, nil
+			}
+			f, err = os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0o644)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+			f.Close()
+			return nil, fmt.Errorf("lock %s: %w", path, err)
+		}
+		// Another writer may have renamed a new file over path while we waited: lock that one instead.
+		held, err1 := f.Stat()
+		now, err2 := os.Stat(path)
+		if err1 == nil && err2 == nil && os.SameFile(held, now) {
+			return f, nil
+		}
 		f.Close()
-		return false, err
+		if err1 != nil {
+			return nil, err1
+		}
+		if err2 != nil && !errors.Is(err2, os.ErrNotExist) {
+			return nil, err2
+		}
 	}
-	return true, f.Close()
+}
+
+// rename is os.Rename; tests replace it to take the in-place path.
+var rename = os.Rename
+
+// replaceFile writes data to a temporary file next to path with the mode and owner of fi, syncs it and
+// renames it over path.
+func replaceFile(path string, fi os.FileInfo, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".vabbit-*")
+	if err != nil {
+		return err
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			tmp.Close()
+			os.Remove(tmp.Name())
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		return err
+	}
+	if err := tmp.Chmod(fi.Mode().Perm()); err != nil {
+		return err
+	}
+	if st, isUnix := fi.Sys().(*syscall.Stat_t); isUnix && (int(st.Uid) != os.Geteuid() || int(st.Gid) != os.Getegid()) {
+		if err := tmp.Chown(int(st.Uid), int(st.Gid)); err != nil {
+			return err
+		}
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	ok = true
+	if d, err := os.Open(filepath.Dir(path)); err == nil { // make the rename durable; best effort
+		d.Sync()
+		d.Close()
+	}
+	return nil
+}
+
+// canNotReplace reports whether err means that path cannot be replaced by a rename (bind mount,
+// read-only or sandboxed directory, an owner we may not set) but may still be written in place.
+func canNotReplace(err error) bool {
+	for _, e := range []error{syscall.EBUSY, syscall.EXDEV, syscall.EROFS, syscall.EPERM, syscall.EACCES} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// writeInPlace rewrites the file at path in place: the new content is written from the start of the
+// file, then the file is cut to its length and synced, so readers never see an empty file. It is not
+// atomic: a crash between the write and the cut leaves the tail of a longer old content behind. Cutting
+// first would instead show readers an empty file on every write, so this order is kept; the window is
+// one syscall, and it only applies where a rename is impossible.
+func writeInPlace(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.WriteAt(data, 0); err != nil {
+		return err
+	}
+	if err := f.Truncate(int64(len(data))); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // ValidHostName reports whether s is a valid lower-case host name: labels of letters, digits and

@@ -76,6 +76,7 @@ func Run(ctx context.Context, o Options) error {
 		relaySrv   *relay.Server
 		relayInfo  *api.Relay
 		lastHosts  []hosts.Entry
+		hostsErr   string
 		hostsFile  = o.HostsFile
 	)
 	if hostsFile == "" {
@@ -142,14 +143,25 @@ func Run(ctx context.Context, o Options) error {
 				for _, p := range n.Peers {
 					peerByName[p.PublicKey] = p.Name
 				}
-				if entries, skipped := hostEntries(o.Device.Name, n.Address.Addr(), n.Peers, o.Domain); !slices.Equal(entries, lastHosts) {
+				if o.Domain != "" {
+					// Applied after every sync, not only when the names change: Apply writes nothing when the
+					// block is already right, and puts it back when someone else removed it.
+					selfName := n.SelfName
+					if selfName == "" {
+						selfName = o.Device.Name
+					}
+					entries, skipped := hostEntries(selfName, n.Address.Addr(), n.Peers, o.Domain)
 					if _, err := hosts.Apply(hostsFile, o.Iface, entries); err != nil {
-						o.Logf("could not write the device names to %s: %v", hostsFile, err)
+						if msg := err.Error(); msg != hostsErr { // once per distinct error, not every sync
+							hostsErr = msg
+							o.Logf("could not write the device names to %s: %v", hostsFile, err)
+						}
 					} else {
-						lastHosts = entries
-						if skipped > 0 {
+						hostsErr = ""
+						if skipped > 0 && !slices.Equal(entries, lastHosts) {
 							o.Logf("%d device name(s) skipped: not valid host names or used twice", skipped)
 						}
+						lastHosts = entries
 					}
 				}
 				if n.Address != lastAddr || n.SelfHub != lastHub {

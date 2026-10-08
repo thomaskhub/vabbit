@@ -16,8 +16,9 @@ CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 ProtectSystem=strict
-# /etc/hosts: the names of the other devices (see --domain)
-ReadWritePaths=/var/lib/vabbit /proc/sys/net/ipv4/conf /etc/hosts
+# /etc/hosts: the names of the other devices (see --domain); "-" = fine if it is missing.
+# It is bind-mounted here, so it is rewritten in place (rename gives EBUSY/EROFS).
+ReadWritePaths=/var/lib/vabbit /proc/sys/net/ipv4/conf -/etc/hosts
 # Control socket for `vabbit status` / `wg show`.
 RuntimeDirectory=wireguard
 RuntimeDirectoryMode=0700

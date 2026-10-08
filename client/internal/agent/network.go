@@ -20,7 +20,9 @@ type Network struct {
 	Address netip.Prefix // our VPN address with the network prefix length
 	CIDR    netip.Prefix
 	SelfHub bool
-	Peers   []Peer
+	// SelfName is this device's name as the server knows it (an admin may have renamed it).
+	SelfName string
+	Peers    []Peer
 }
 
 type Peer struct {
@@ -48,7 +50,7 @@ func Validate(s api.SyncResponse, pinnedCIDR, selfPublicKey string) (Network, er
 	if err != nil || !addr.Addr().Is4() || addr.Bits() != cidr.Bits() || !cidr.Contains(addr.Addr()) {
 		return Network{}, fmt.Errorf("server sent invalid address %q", s.Address)
 	}
-	n := Network{Address: addr, CIDR: cidr, SelfHub: s.Self.Hub}
+	n := Network{Address: addr, CIDR: cidr, SelfHub: s.Self.Hub, SelfName: s.Self.Name}
 	seenKey := map[string]bool{selfPublicKey: true}
 	seenIP := map[netip.Addr]bool{addr.Addr(): true}
 	for _, p := range s.Peers {
