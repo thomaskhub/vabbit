@@ -2,7 +2,7 @@
 
 # Vabbit
 
-A tiny, NetBird-style WireGuard network manager whose control plane is a single
+A tiny WireGuard mesh VPN manager whose control plane is a single
 [Bunny.net Edge Script](https://bunny.net/edge-scripting/). **One edge script = one
 network.** Want separate VPNs? Deploy the script again with another storage zone.
 
