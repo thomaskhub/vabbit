@@ -86,7 +86,7 @@ and darwin amd64/arm64 with `-X main.version`, unit file, install.sh,
 SHA256SUMS, `gh release create --generate-notes`). Tags with a suffix (`-rc.1`) become
 pre-releases. The workflow can also be run by hand with a `tag` input, which creates the tag;
 agent sessions use that (`POST /repos/thomaskhub/vabbit/actions/workflows/release.yml/dispatches`)
-because they can't push tags. Published so far: `v0.1.0-rc.1` and `v0.1.0-rc.2` (pre-releases; rc.2 includes PRs 1-5).
+because they can't push tags. Published so far: `v0.1.0-rc.1` to `rc.3` (pre-releases; rc.3 has PRs 1-5 and `vabbit deploy`).
 
 ## Working on the code
 
