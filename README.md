@@ -15,7 +15,7 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
 * Made for home labs, laptops and cloud VMs: a small cloud VM makes the ideal hub.
 * Tokens are 256-bit random values stored only as SHA-256 hashes.
 
-See [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
+See [docs/USAGE.md](docs/USAGE.md) for a full walkthrough and [docs/DESIGN.md](docs/DESIGN.md) for how it works and the security model.
 
 ## 1. Deploy a network (once per network)
 
