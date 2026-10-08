@@ -36,7 +36,7 @@ Admin:
   vabbit admin-token                       generate an admin token and its SHA-256 for the edge script
   vabbit login --server URL                add a network's admin token to your encrypted admin login
   vabbit logout                            delete the admin login on this machine
-  vabbit keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
+  vabbit keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d] [--replace]
   vabbit keys ls
   vabbit keys rm ID
   vabbit devices ls
@@ -229,6 +229,7 @@ func cmdKeys(ctx context.Context, args []string) error {
 		maxUses := fs.Int("max-uses", 0, "limit uses of a reusable key (0 = unlimited)")
 		ttlFlag := fs.String("ttl", "24h", "how long the key can be used: e.g. 2h, 7d, or never")
 		devTTLFlag := fs.String("device-ttl", "never", "devices enrolled with this key lose access this long after joining, e.g. 7d")
+		replace := fs.Bool("replace", false, "devices joining with this key take over the name and VPN address of the device with the same name (use a short --ttl)")
 		fs.Parse(args[1:])
 		ttl, err := parseLifetime(*ttlFlag)
 		if err != nil {
@@ -238,7 +239,7 @@ func cmdKeys(ctx context.Context, args []string) error {
 		if err != nil {
 			return fmt.Errorf("--device-ttl: %w", err)
 		}
-		k, err := c.CreateSetupKey(ctx, api.SetupKeyOptions{Reusable: *reusable, MaxUses: *maxUses, TTL: ttl, DeviceTTL: devTTL})
+		k, err := c.CreateSetupKey(ctx, api.SetupKeyOptions{Reusable: *reusable, MaxUses: *maxUses, TTL: ttl, DeviceTTL: devTTL, Replace: *replace})
 		if err != nil {
 			return err
 		}
@@ -249,13 +250,16 @@ func cmdKeys(ctx context.Context, args []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "id %s, key expires %s, %s. On the device run:\n  sudo VABBIT_SETUP_KEY=%s vabbit up --server <URL>\n",
 			k.ID, whenOrNever(k.ExpiresAt), devices, k.Key)
+		if k.Replace {
+			fmt.Fprintln(os.Stderr, "This key replaces: a device that joins with it removes the existing device of the same name and takes over its VPN address. Keep it short-lived and don't share it.")
+		}
 	case "ls":
 		keys, err := c.ListSetupKeys(ctx)
 		if err != nil {
 			return err
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tREUSABLE\tUSES\tKEY EXPIRES\tDEVICE ACCESS")
+		fmt.Fprintln(w, "ID\tREUSABLE\tUSES\tKEY EXPIRES\tDEVICE ACCESS\tREPLACES")
 		for _, k := range keys {
 			limit := "∞"
 			if k.MaxUses > 0 {
@@ -265,7 +269,11 @@ func cmdKeys(ctx context.Context, args []string) error {
 			if k.DeviceTTLSeconds != nil {
 				access = humanDuration(time.Duration(*k.DeviceTTLSeconds) * time.Second)
 			}
-			fmt.Fprintf(w, "%s\t%v\t%d/%s\t%s\t%s\n", k.ID, k.Reusable, k.Uses, limit, whenOrNever(k.ExpiresAt), access)
+			replaces := "no"
+			if k.Replace {
+				replaces = "same name"
+			}
+			fmt.Fprintf(w, "%s\t%v\t%d/%s\t%s\t%s\t%s\n", k.ID, k.Reusable, k.Uses, limit, whenOrNever(k.ExpiresAt), access, replaces)
 		}
 		w.Flush()
 	case "rm":

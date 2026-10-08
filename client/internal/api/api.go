@@ -145,6 +145,8 @@ type SetupKey struct {
 	ExpiresAt *string `json:"expiresAt"` // nil = never
 	// DeviceTTLSeconds limits how long devices enrolled with this key keep access.
 	DeviceTTLSeconds *int `json:"deviceTtlSeconds"`
+	// Replace: enrolling with this key removes the devices of the same name and keeps their address.
+	Replace bool `json:"replace"`
 }
 
 // SetupKeyOptions configures a new setup key. Zero TTL means it never expires;
@@ -154,6 +156,9 @@ type SetupKeyOptions struct {
 	MaxUses   int
 	TTL       time.Duration
 	DeviceTTL time.Duration
+	// Replace makes devices that enroll with the key take over the name and address of an existing
+	// device with the same name.
+	Replace bool
 }
 
 type Peer struct {
@@ -203,6 +208,9 @@ func (c *Client) CreateSetupKey(ctx context.Context, o SetupKeyOptions) (SetupKe
 	}
 	if o.DeviceTTL > 0 {
 		in["deviceTtlSeconds"] = int(o.DeviceTTL.Seconds())
+	}
+	if o.Replace {
+		in["replace"] = true
 	}
 	var k SetupKey
 	return k, c.do(ctx, "POST", "/api/v1/setup-keys", in, &k)

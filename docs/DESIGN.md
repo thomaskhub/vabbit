@@ -126,13 +126,15 @@ Bunny Storage HTTP API (`AccessKey` header), objects:
 
 ```
 devices/<id>.json        {id, name, publicKey, ip, endpoint, candidates, relay, hub, tokenHash, createdAt, lastSeen}
-setup-keys/<sha256>.json {id, hash, reusable, maxUses, uses, expiresAt, createdAt}
+setup-keys/<sha256>.json {id, hash, reusable, maxUses, uses, expiresAt, replace, createdAt}
 ```
 
 Notes:
 * Storage has no compare-and-swap. IP allocation probes from a hash of the
-  device public key, so concurrent enrollments almost never collide; the
-  allocator also refuses duplicate public keys.
+  device public key, so concurrent enrollments almost never collide.
+  Duplicate public keys are refused, except
+  on a device being replaced: a `replace` key removes the devices of the
+  same name and reuses the newest one's address.
 * `lastSeen` writes are throttled to one per 5 minutes per device.
 * Do **not** attach a pull zone to the storage zone; it is private state.
 
