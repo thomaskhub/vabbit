@@ -20,6 +20,7 @@ network.** Want separate VPNs? Deploy the script again with another storage zone
 Pictures of the common tasks: [connect four nodes](docs/use-cases/1-connect-four-nodes.svg),
 [remove a node](docs/use-cases/2-remove-a-node.svg), [change the admin token](docs/use-cases/3-change-admin-token.svg).
 How it works and the security model: [docs/DESIGN.md](docs/DESIGN.md).
+Open work: [BACKLOG.md](BACKLOG.md). Picking this up as an AI agent: [AGENT.md](AGENT.md).
 
 ## Who runs what
 
