@@ -64,3 +64,45 @@ password.
   copying the file or to `rotate-admin`.
 * Every command exits non-zero on failure. In scripts and CI, set
   `VABBIT_ADMIN_PASSWORD` and keep `admin.json` with your CI secrets.
+
+## Cloudflare Workers and R2 (by hand)
+
+The same control plane also runs as a Cloudflare Worker with its state in an R2 bucket. `vabbit-deploy`
+does not manage it yet: build the Worker and deploy it with
+[wrangler](https://developers.cloudflare.com/workers/wrangler/).
+
+1. Build: `make worker` (or `cd edge && bun run build:worker`) gives `edge/dist/worker.js`.
+2. Create a **private** R2 bucket, e.g. `vabbit-home-state`. Never attach a public domain to it: its objects
+   describe the network.
+3. `wrangler.toml` next to the bundle:
+
+   ```toml
+   name = "vabbit-home"
+   main = "worker.js"
+   compatibility_date = "2025-01-01"
+
+   [[r2_buckets]]
+   binding = "NETWORK_BUCKET"
+   bucket_name = "vabbit-home-state"
+
+   [vars]
+   NETWORK_NAME = "home"
+   NETWORK_CIDR = "100.92.0.0/16"
+   ```
+
+4. Create the admin token and give the Worker only its hash:
+   `vabbit admin-token` prints both; `wrangler secret put ADMIN_TOKEN_SHA256` takes the hash. Keep the token
+   for `vabbit login --server https://vabbit-home.<account>.workers.dev`.
+5. `wrangler deploy`. A request before the secret and the binding exist answers `503 server misconfigured`.
+
+| Name | Kind | Value |
+|---|---|---|
+| `NETWORK_BUCKET` | R2 binding | the private bucket above |
+| `ADMIN_TOKEN_SHA256` | secret | SHA-256 of the admin token |
+| `NETWORK_NAME`, `NETWORK_CIDR` | variables | optional; `vabbit` and `100.92.0.0/16` by default |
+
+Not covered: `vabbit-deploy` for Cloudflare, and conditional (ETag) writes. The counters in setup keys
+(`uses`) and the device list are read, changed and written back without a lock, exactly as on Bunny Storage; for
+a home or office network that is fine. The Worker is tested against a fake of the R2 binding, not yet on a
+live Cloudflare account.
+

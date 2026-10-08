@@ -11,8 +11,14 @@ export interface Store {
 const KEY_RE = /^[a-z-]+\/[A-Za-z0-9_-]+\.json$/;
 const PREFIX_RE = /^[a-z-]+\/$/;
 
-function checkKey(key: string): void {
+/** Throws unless key is a well-formed storage key ("<dir>/<name>.json"). Every store checks this first. */
+export function checkKey(key: string): void {
   if (!KEY_RE.test(key)) throw new Error(`invalid storage key: ${key}`);
+}
+
+/** Throws unless prefix is a well-formed listing prefix ("<dir>/"). */
+export function checkPrefix(prefix: string): void {
+  if (!PREFIX_RE.test(prefix)) throw new Error(`invalid prefix: ${prefix}`);
 }
 
 export class MemoryStore implements Store {
@@ -35,7 +41,7 @@ export class MemoryStore implements Store {
   }
 
   async list(prefix: string): Promise<string[]> {
-    if (!PREFIX_RE.test(prefix)) throw new Error(`invalid prefix: ${prefix}`);
+    checkPrefix(prefix);
     return [...this.data.keys()]
       .filter((k) => k.startsWith(prefix))
       .map((k) => k.slice(prefix.length));
@@ -101,7 +107,7 @@ export class BunnyStorage implements Store {
   }
 
   async list(prefix: string): Promise<string[]> {
-    if (!PREFIX_RE.test(prefix)) throw new Error(`invalid prefix: ${prefix}`);
+    checkPrefix(prefix);
     const res = await this.req(prefix, { headers: { Accept: "application/json" } });
     if (res.status === 404) {
       await res.body?.cancel();
