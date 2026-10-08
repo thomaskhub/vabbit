@@ -33,14 +33,11 @@ jobs:
           case "$VERSION" in v[0-9]*) ;; *) echo "tag must look like v0.1.0" >&2; exit 1 ;; esac
           mkdir -p out
           (cd edge && bun install --frozen-lockfile && bun run build)
-          cp edge/dist/edge-script.js deploy/edgescript/bundle/
-          for arch in amd64 arm64; do
-            (cd client && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
-              -ldflags="-s -w -X main.version=$VERSION" -o ../out/vabbit-linux-$arch ./cmd/vabbit)
-          done
+          cp edge/dist/edge-script.js client/internal/deploy/edgescript/bundle/
+          # Linux runs devices and admin commands; macOS is for admins (deploy, keys, devices).
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
-            (cd deploy && CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build -trimpath \
-              -ldflags="-s -w" -o ../out/vabbit-deploy-${target%/*}-${target#*/} ./cmd/vabbit-deploy)
+            (cd client && CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build -trimpath \
+              -ldflags="-s -w -X main.version=$VERSION" -o ../out/vabbit-${target%/*}-${target#*/} ./cmd/vabbit)
           done
           cp packaging/vabbit@.service scripts/install.sh out/
           (cd out && sha256sum * > SHA256SUMS)

@@ -24,6 +24,7 @@ import (
 	"vabbit/adminlogin"
 	"vabbit/internal/agent"
 	"vabbit/internal/api"
+	"vabbit/internal/deploy/cli"
 	"vabbit/internal/state"
 	"vabbit/internal/wg"
 )
@@ -31,6 +32,10 @@ import (
 var version = "dev"
 
 const usage = `vabbit - tiny WireGuard networks managed from a Bunny Edge Script
+
+Deploy (needs BUNNY_API_KEY; see vabbit deploy help):
+  vabbit deploy init|plan|apply|status     run networks on bunny.net from vabbit.toml
+  vabbit deploy rotate-admin|destroy -n NAME
 
 Admin:
   vabbit admin-token                       generate an admin token and its SHA-256 for the edge script
@@ -66,6 +71,8 @@ func main() {
 	var err error
 	args := os.Args[2:]
 	switch os.Args[1] {
+	case "deploy":
+		err = cli.Run(ctx, args)
 	case "admin-token":
 		err = cmdAdminToken()
 	case "login":
@@ -168,7 +175,7 @@ func openLogin(create bool) (string, adminlogin.Login, []byte, error) {
 	}
 	if !adminlogin.Exists(path) {
 		if !create {
-			return path, l, nil, errors.New("not logged in as admin; run `vabbit-deploy init` (if you deploy) or `vabbit login --server URL`")
+			return path, l, nil, errors.New("not logged in as admin; run `vabbit deploy init` (if you deploy) or `vabbit login --server URL`")
 		}
 		pw, err := adminlogin.NewPassword()
 		return path, l, pw, err
@@ -190,7 +197,7 @@ func cmdLogout() error {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "This deletes %s, the admin tokens of your networks.\n", path)
-	fmt.Fprintln(os.Stderr, "Without a copy you'll need `vabbit-deploy rotate-admin` to manage them again.")
+	fmt.Fprintln(os.Stderr, "Without a copy you'll need `vabbit deploy rotate-admin` to manage them again.")
 	fmt.Fprint(os.Stderr, "Type yes to continue: ")
 	if line, _ := readLine(os.Stdin); line != "yes" {
 		return errors.New("not confirmed, nothing deleted")

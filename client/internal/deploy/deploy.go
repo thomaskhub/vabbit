@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"io"
 
-	"vabbit-deploy/internal/bunny"
-	"vabbit-deploy/internal/config"
+	"vabbit/internal/deploy/bunny"
+	"vabbit/internal/deploy/config"
 )
 
 // Variables that hold non-secret fingerprints of secrets, so apply can tell
@@ -174,7 +174,7 @@ func Apply(ctx context.Context, c *bunny.Client, n config.Network, code, adminHa
 	if res.Changed {
 		o.step("publish")
 		if !o.DryRun {
-			if err := c.Publish(ctx, script.ID, "vabbit-deploy"); err != nil {
+			if err := c.Publish(ctx, script.ID, "vabbit deploy"); err != nil {
 				return res, fmt.Errorf("publish: %w", err)
 			}
 		}

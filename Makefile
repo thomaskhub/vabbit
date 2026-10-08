@@ -1,17 +1,15 @@
-.PHONY: test build edge worker client deploy sbom
+.PHONY: test build edge worker client sbom
 test:
 	cd edge && bun test
 	cd client && go vet ./... && go test ./...
-	cd deploy && go vet ./... && go test ./...
 edge:
 	cd edge && bun run build
 worker:
 	cd edge && bun run build:worker
-client:
+# vabbit embeds the edge script, so `vabbit deploy` needs no Bun or Node.
+client: edge
+	cp edge/dist/edge-script.js client/internal/deploy/edgescript/bundle/
 	cd client && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/vabbit ./cmd/vabbit
-deploy: edge
-	cp edge/dist/edge-script.js deploy/edgescript/bundle/
-	cd deploy && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/vabbit-deploy ./cmd/vabbit-deploy
-build: edge client deploy
+build: client
 sbom:
 	./scripts/sbom.sh

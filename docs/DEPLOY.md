@@ -1,4 +1,4 @@
-# `vabbit-deploy` reference
+# `vabbit deploy` reference
 
 The commands and the normal flow are in the [README](../README.md#admin-deploy-and-manage-a-network).
 This page covers the config file and what `apply` does on Bunny.
@@ -67,7 +67,7 @@ password.
 
 ## Cloudflare Workers and R2 (by hand)
 
-The same control plane also runs as a Cloudflare Worker with its state in an R2 bucket. `vabbit-deploy`
+The same control plane also runs as a Cloudflare Worker with its state in an R2 bucket. `vabbit deploy`
 does not manage it yet: build the Worker and deploy it with
 [wrangler](https://developers.cloudflare.com/workers/wrangler/).
 
@@ -102,7 +102,7 @@ does not manage it yet: build the Worker and deploy it with
 | `ADMIN_TOKEN_SHA256` | secret | SHA-256 of the admin token |
 | `NETWORK_NAME`, `NETWORK_CIDR` | variables | optional; `vabbit` and `100.92.0.0/16` by default |
 
-Not covered: `vabbit-deploy` for Cloudflare, and conditional (ETag) writes. The counters in setup keys
+Not covered: `vabbit deploy` for Cloudflare, and conditional (ETag) writes. The counters in setup keys
 (`uses`) and the device list are read, changed and written back without a lock, exactly as on Bunny Storage; for
 a home or office network that is fine. The Worker is tested against a fake of the R2 binding, not yet on a
 live Cloudflare account.

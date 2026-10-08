@@ -1,6 +1,6 @@
 // Package adminlogin is the admin's login file, ~/.config/vabbit/admin.json:
 // the admin token of every network the admin runs, encrypted with a master
-// password. vabbit-deploy creates the tokens there and fills in each network's
+// password. `vabbit deploy` creates the tokens there and fills in each network's
 // URL; vabbit reads it for admin commands.
 //
 // The whole content (names, URLs, tokens) is one sealed blob: Argon2id derives
@@ -229,13 +229,13 @@ func (l *Login) Select(name string) (Network, error) {
 		case !ok:
 			return Network{}, fmt.Errorf("no admin login for network %q", name)
 		case n.Server == "":
-			return Network{}, fmt.Errorf("network %q is not deployed yet; run vabbit-deploy apply", name)
+			return Network{}, fmt.Errorf("network %q is not deployed yet; run vabbit deploy apply", name)
 		}
 		return n, nil
 	}
 	switch len(live) {
 	case 0:
-		return Network{}, errors.New("no deployed network in the admin login; run vabbit-deploy apply or vabbit login")
+		return Network{}, errors.New("no deployed network in the admin login; run vabbit deploy apply or vabbit login")
 	case 1:
 		return live[0], nil
 	}

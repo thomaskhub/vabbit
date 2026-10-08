@@ -26,19 +26,20 @@ Open work: [BACKLOG.md](BACKLOG.md). Picking this up as an AI agent: [AGENT.md](
 
 | Role | Tool | Does |
 |---|---|---|
-| [Admin](#admin-deploy-and-manage-a-network) | `vabbit-deploy`, `vabbit` | Deploys the network on bunny.net, hands out setup keys, manages devices and hubs. |
+| [Admin](#admin-deploy-and-manage-a-network) | `vabbit` (`vabbit deploy …` and admin commands) | Deploys the network on bunny.net, hands out setup keys, manages devices and hubs. |
 | [Users](#users-connect-a-device) | `vabbit` | Connect a laptop, server or VM with a setup key. Need root, no admin rights. |
 
 ## Admin: deploy and manage a network
 
-One flow, three commands:
+Get `vabbit` for Linux or macOS from the [releases page](https://github.com/thomaskhub/vabbit/releases)
+(or `make build`). One flow, three commands:
 
 ```sh
-make build && export BUNNY_API_KEY=...   # Bunny: Account settings > API key
-./dist/vabbit-deploy init                # writes vabbit.toml, asks for a master password,
+export BUNNY_API_KEY=...                 # Bunny: Account settings > API key
+vabbit deploy init                       # writes vabbit.toml, asks for a master password,
                                          # creates the admin token (stored encrypted)
-./dist/vabbit-deploy apply               # deploys every network in vabbit.toml
-./dist/vabbit keys create                # you're ready: hand out setup keys
+vabbit deploy apply                      # deploys every network in vabbit.toml
+vabbit keys create                       # you're ready: hand out setup keys
 ```
 
 `init` creates `~/.config/vabbit/admin.json`, which holds the admin token of each of
@@ -54,23 +55,23 @@ differs. To add a network, add a `[[network]]` block and `apply`; it gets its ow
 **More admins.** Copy `admin.json` to their `~/.config/vabbit/` (mode 0600) and give
 them the master password separately. The file is useless without the password, so it
 can travel over normal channels. Everyone shares the token: to remove someone, run
-`vabbit-deploy rotate-admin -n NAME` and share the new file. With several networks in
+`vabbit deploy rotate-admin -n NAME` and share the new file. With several networks in
 the file, pick one per command with `VABBIT_NETWORK=NAME`.
 
 **Lost the file or password?** Bunny keeps only the hash, so the token can't be recovered.
-`vabbit-deploy rotate-admin -n NAME` makes a new one (needs the Bunny API key). Devices
+`vabbit deploy rotate-admin -n NAME` makes a new one (needs the Bunny API key). Devices
 keep working.
 
-### `vabbit-deploy` (needs `BUNNY_API_KEY`)
+### `vabbit deploy` (needs `BUNNY_API_KEY`)
 
 | Command | What it does |
 |---|---|
-| `vabbit-deploy init` | Write an example `vabbit.toml` and create your encrypted admin login with a token per network. |
-| `vabbit-deploy plan` | Show what `apply` would change, without changing anything. |
-| `vabbit-deploy apply` | Create or update every network on Bunny. Safe to run repeatedly. |
-| `vabbit-deploy status` | Show each network's URL and whether it answers. |
-| `vabbit-deploy rotate-admin -n NAME` | Replace a network's admin token (in your admin login and on Bunny). |
-| `vabbit-deploy destroy -n NAME` | Delete a network's edge script and storage zone. Asks you to type the name. |
+| `vabbit deploy init` | Write an example `vabbit.toml` and create your encrypted admin login with a token per network. |
+| `vabbit deploy plan` | Show what `apply` would change, without changing anything. |
+| `vabbit deploy apply` | Create or update every network on Bunny. Safe to run repeatedly. |
+| `vabbit deploy status` | Show each network's URL and whether it answers. |
+| `vabbit deploy rotate-admin -n NAME` | Replace a network's admin token (in your admin login and on Bunny). |
+| `vabbit deploy destroy -n NAME` | Delete a network's edge script and storage zone. Asks you to type the name. |
 
 | Flag | Meaning |
 |---|---|
@@ -110,7 +111,7 @@ out of every peer list at once, and its own agent shuts its interface down.
 | `vabbit devices ls` | List devices. |
 | `vabbit devices set ID` | Rename a device, make it a hub, or set when its access expires. |
 | `vabbit devices rm ID` | Remove a device; it is cut off on its next sync. |
-| `vabbit login --server URL` | Add a network you didn't deploy with `vabbit-deploy` (asks for its token). |
+| `vabbit login --server URL` | Add a network you didn't deploy with `vabbit deploy` (asks for its token). |
 | `vabbit logout` | Delete the admin login on this machine. |
 
 **`vabbit keys create`**
@@ -134,7 +135,7 @@ out of every peer list at once, and its own agent shuts its interface down.
 | `--expires DURATION` | Remove the device's access this long from now (e.g. `7d`), or `never`. |
 
 <details>
-<summary>Without vabbit-deploy: set it up by hand in the Bunny dashboard</summary>
+<summary>Without vabbit deploy: set it up by hand in the Bunny dashboard</summary>
 
 1. Build the client (`make client`, Go 1.22+) or download a CI artifact.
 2. Generate the admin token with `./dist/vabbit admin-token`. Keep the `vba_…` token;
@@ -308,8 +309,7 @@ sudo vabbit up --dry-run                 # syncs once and prints the peers inste
 ```
 
 To publish a release, push a tag such as `v0.1.0` (or run the workflow by hand with that tag): [release.yml](.github/workflows/release.yml)
-builds the client (Linux amd64/arm64), `vabbit-deploy` (Linux and macOS), the systemd
-unit, `install.sh` and `SHA256SUMS`, and attaches them to a GitHub release.
+builds `vabbit` (Linux and macOS, amd64/arm64), the systemd unit, `install.sh` and `SHA256SUMS`, and attaches them to a GitHub release.
 
 ## Dependencies
 

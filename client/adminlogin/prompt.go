@@ -34,7 +34,7 @@ func NewPassword() ([]byte, error) {
 		return []byte(pw), nil
 	}
 	fmt.Fprintln(os.Stderr, "Choose a master password. It encrypts your admin tokens on this machine and")
-	fmt.Fprintln(os.Stderr, "can't be recovered; without it you need `vabbit-deploy rotate-admin`.")
+	fmt.Fprintln(os.Stderr, "can't be recovered; without it you need `vabbit deploy rotate-admin`.")
 	pw, err := Prompt("New master password: ")
 	if err != nil {
 		return nil, err

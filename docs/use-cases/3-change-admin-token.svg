@@ -21,7 +21,7 @@
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">1</text>
     <text x="40" y="19" class="step">Make a new token</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">vabbit-deploy rotate-admin -n home</text>
+    <text x="52" y="50" class="code">vabbit deploy rotate-admin -n home</text>
     <text x="40" y="78" font-size="13" class="m">Stores a new token in your encrypted admin login and deploys its hash.</text>
   </g>
   <g transform="translate(30,198)">

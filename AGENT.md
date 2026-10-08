@@ -16,7 +16,7 @@ mention or compare to NetBird in the docs (removed on purpose).
 |---|---|---|---|
 | Control plane | `edge/` | TypeScript (Bun) | `src/handler.ts` API, `store.ts` Bunny Storage, `ipam.ts`, `crypto.ts`, `dev.ts` local server; `worker.ts` + `r2store.ts` run the same API as a Cloudflare Worker on R2 (manual deploy, docs/DEPLOY.md) |
 | Client + agent | `client/` (module `vabbit`) | Go | `cmd/vabbit`, `adminlogin/` (encrypted admin file), `internal/{agent,api,relay,state,stun,wg}` |
-| Deploy tool | `deploy/` (module `vabbit-deploy`) | Go | `cmd/vabbit-deploy`, `internal/{config,deploy}`; embeds the built edge script; `replace vabbit => ../client` |
+| Deploy (`vabbit deploy`) | `client/internal/deploy/` | Go | `cli/` (the subcommand), `config/`, `bunny/` (API client), `edgescript/` (embeds the built edge script); was a separate `vabbit deploy` binary until 2026-10-08 |
 | Installer | `scripts/install.sh` | POSIX sh | curl one-liner for client devices |
 | Packaging | `packaging/vabbit@.service` | systemd | `vabbit@<iface>`; only CAP_NET_ADMIN + CAP_NET_BIND_SERVICE |
 | Docs | `README.md`, `docs/DESIGN.md`, `docs/DEPLOY.md` | | README is the user guide, organised by role |
@@ -48,10 +48,10 @@ There is no database: state is small JSON files in a private Bunny Storage zone
 The owner insisted on **one deploy flow with as few flags as possible**; the person who
 deploys is assumed to be the admin.
 
-1. `vabbit-deploy init` writes `vabbit.toml` (never overwrites an existing one), asks for a
+1. `vabbit deploy init` writes `vabbit.toml` (never overwrites an existing one), asks for a
    new master password (masked with `*`, min 8 chars, typed twice), and creates an admin
    token per network in `~/.config/vabbit/admin.json`.
-2. `BUNNY_API_KEY=… vabbit-deploy apply` asks for the master password, deploys each token's
+2. `BUNNY_API_KEY=… vabbit deploy apply` asks for the master password, deploys each token's
    hash, saves each network's URL into `admin.json`, waits until the network is healthy.
    It refuses if a network already has an admin token that `admin.json` doesn't hold
    (copy the file from the other admin, or `rotate-admin`).
@@ -82,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/thomaskhub/vabbit/main/scripts/inst
 `GITHUB_TOKEN` (private repo), `VABBIT_REPO`, `VABBIT_BASE_URL` (tests).
 
 Releases: pushing a `v*` tag runs `.github/workflows/release.yml` (client linux
-amd64/arm64 with `-X main.version`, vabbit-deploy linux+darwin, unit file, install.sh,
+and darwin amd64/arm64 with `-X main.version`, unit file, install.sh,
 SHA256SUMS, `gh release create --generate-notes`). Tags with a suffix (`-rc.1`) become
 pre-releases. The workflow can also be run by hand with a `tag` input, which creates the tag;
 agent sessions use that (`POST /repos/thomaskhub/vabbit/actions/workflows/release.yml/dispatches`)
@@ -92,7 +92,7 @@ because they can't push tags. Published so far: `v0.1.0-rc.1` and `v0.1.0-rc.2` 
 
 ```sh
 make test                         # edge bun test + go vet/test for client and deploy
-make build                        # dist/vabbit and dist/vabbit-deploy (embeds edge/dist)
+make build                        # dist/vabbit (embeds edge/dist for vabbit deploy)
 sudo ./scripts/e2e-nat.sh         # real tunnels in network namespaces: cone, symmetric, hotel, failover
 ./scripts/sbom.sh                 # regenerate sbom/ after any dependency change, then commit it
 cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :8787
@@ -106,7 +106,7 @@ cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :878
   never run a `pkill -f` whose pattern appears in your own command line.
 - `scripts/sbom.sh` strips `GOVERSION` and the replace-module hashes so the SBOM is the same on
   every Go version; the local `vabbit` module is labelled MIT.
-- After changing `edge/`, `make deploy` copies the bundle into `deploy/edgescript/bundle/`.
+- After changing `edge/`, `make client` copies the bundle into `client/internal/deploy/edgescript/bundle/`.
 
 ## Conventions and owner preferences
 
@@ -137,6 +137,7 @@ cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :878
 | Admin decides hubs, can change any time; "hub key" idea rejected | Hubs see relayed traffic, so only the admin promotes them |
 | Several hubs with automatic failover | Owner wanted a backup hub |
 | One-line installer from GitHub raw + tagged releases | Easy client setup |
+| `vabbit-deploy` merged into `vabbit` as `vabbit deploy` | One program to install and explain; gives Mac admins a `vabbit` build. Deploy code on devices is harmless: it needs the Bunny API key |
 
 ## Where things stand (2026-10-08)
 

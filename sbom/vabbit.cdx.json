@@ -3,6 +3,35 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
+      "bom-ref": "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module",
+      "evidence": {
+        "licenses": [
+          {
+            "license": {
+              "id": "MIT"
+            }
+          }
+        ]
+      },
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/BurntSushi/toml"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "92ea08c59432d96451935a6db60f5ab1ff9656fead590b8135598af3e9ea3ebd"
+        }
+      ],
+      "name": "github.com/BurntSushi/toml",
+      "purl": "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module&goos=linux&goarch=amd64",
+      "scope": "required",
+      "type": "library",
+      "version": "v1.4.0"
+    },
+    {
       "bom-ref": "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
       "evidence": {
         "licenses": [
@@ -121,11 +150,15 @@
   "dependencies": [
     {
       "dependsOn": [
+        "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module",
         "pkg:golang/golang.org/x/crypto@v0.37.0?type=module",
         "pkg:golang/golang.org/x/term@v0.31.0?type=module",
         "pkg:golang/golang.zx2c4.com/wireguard@v0.0.0-20250521234502-f333402bd9cb?type=module"
       ],
       "ref": "pkg:golang/vabbit@source?type=module#cmd/vabbit"
+    },
+    {
+      "ref": "pkg:golang/github.com/BurntSushi/toml@v1.4.0?type=module"
     },
     {
       "dependsOn": [

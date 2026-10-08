@@ -14,8 +14,8 @@ import (
 	"sync"
 	"testing"
 
-	"vabbit-deploy/internal/bunny"
-	"vabbit-deploy/internal/config"
+	"vabbit/internal/deploy/bunny"
+	"vabbit/internal/deploy/config"
 )
 
 // fakeBunny is an in-memory stand-in for the parts of api.bunny.net we use.

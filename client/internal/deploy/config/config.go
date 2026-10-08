@@ -16,7 +16,7 @@ type File struct {
 	// key. The key itself never goes in the file.
 	APIKeyEnv string `toml:"api_key_env"`
 	// Script is the built edge script (edge/dist/edge-script.js). Empty means
-	// the copy built into vabbit-deploy.
+	// the copy built into vabbit.
 	Script   string    `toml:"script"`
 	Networks []Network `toml:"network"`
 }
@@ -116,10 +116,10 @@ func (f File) Network(name string) (Network, bool) {
 	return Network{}, false
 }
 
-// Example is written by `vabbit-deploy init`.
+// Example is written by `vabbit deploy init`.
 const Example = `# Vabbit networks on bunny.net. Deploy with:
 #   export BUNNY_API_KEY=...        # Account settings > API key
-#   vabbit-deploy apply
+#   vabbit deploy apply
 #
 # Each [[network]] becomes one edge script and one private storage zone. Admin
 # tokens are not in this file: they live encrypted in ~/.config/vabbit/admin.json.

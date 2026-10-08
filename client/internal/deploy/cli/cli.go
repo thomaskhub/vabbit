@@ -1,6 +1,6 @@
-// vabbit-deploy creates and updates Vabbit networks on bunny.net from
-// a TOML file.
-package main
+// Package cli is `vabbit deploy`: it creates and updates Vabbit networks on
+// bunny.net from a TOML file.
+package cli
 
 import (
 	"bufio"
@@ -10,62 +10,55 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
 	"time"
 
-	"vabbit-deploy/edgescript"
-	"vabbit-deploy/internal/bunny"
-	"vabbit-deploy/internal/config"
-	"vabbit-deploy/internal/deploy"
 	"vabbit/adminlogin"
+	"vabbit/internal/deploy"
+	"vabbit/internal/deploy/bunny"
+	"vabbit/internal/deploy/config"
+	"vabbit/internal/deploy/edgescript"
 )
 
-const usage = `vabbit-deploy: run Vabbit networks on bunny.net from a config file
+const usage = `vabbit deploy: run Vabbit networks on bunny.net from a config file
 
-  vabbit-deploy init                 write vabbit.toml and set up your encrypted admin login
-  vabbit-deploy plan                 show what apply would change (changes nothing)
-  vabbit-deploy apply                create or update every network in the file
-  vabbit-deploy status               show each network's URL and health
-  vabbit-deploy rotate-admin -n NAME replace a network's admin token
-  vabbit-deploy destroy -n NAME      delete a network's edge script and storage
+  vabbit deploy init                 write vabbit.toml and set up your encrypted admin login
+  vabbit deploy plan                 show what apply would change (changes nothing)
+  vabbit deploy apply                create or update every network in the file
+  vabbit deploy status               show each network's URL and health
+  vabbit deploy rotate-admin -n NAME replace a network's admin token
+  vabbit deploy destroy -n NAME      delete a network's edge script and storage
 
 Flags: -f FILE (default vabbit.toml), -n NAME (only this network).
 The Bunny API key is read from $BUNNY_API_KEY (or the variable named by
 api_key_env in the file). Admin tokens are kept in ~/.config/vabbit/admin.json,
-encrypted with your master password; vabbit uses the same file.
+encrypted with your master password; the other admin commands use the same file.
 `
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+// Run runs `vabbit deploy ARGS...`.
+func Run(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		fmt.Print(usage)
+		return nil
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	var err error
-	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
+	switch cmd, args := args[0], args[1:]; cmd {
 	case "init":
-		err = cmdInit(args)
+		return cmdInit(args)
 	case "plan":
-		err = cmdApply(ctx, args, true)
+		return cmdApply(ctx, args, true)
 	case "apply":
-		err = cmdApply(ctx, args, false)
+		return cmdApply(ctx, args, false)
 	case "status":
-		err = cmdStatus(ctx, args)
+		return cmdStatus(ctx, args)
 	case "rotate-admin":
-		err = cmdRotate(ctx, args)
+		return cmdRotate(ctx, args)
 	case "destroy":
-		err = cmdDestroy(ctx, args)
+		return cmdDestroy(ctx, args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
+		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", cmd, usage)
-		os.Exit(2)
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		return fmt.Errorf("unknown deploy command %q (see vabbit deploy help)", cmd)
 	}
 }
 
@@ -106,7 +99,7 @@ func (c *common) load() (config.File, []config.Network, *bunny.Client, error) {
 }
 
 func cmdInit(args []string) error {
-	fs := flag.NewFlagSet("init", flag.ExitOnError)
+	fs := flag.NewFlagSet("deploy init", flag.ExitOnError)
 	file := fs.String("f", "vabbit.toml", "file to write")
 	fs.Parse(args)
 	fh, err := os.OpenFile(*file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
@@ -134,7 +127,7 @@ func cmdInit(args []string) error {
 			return err
 		}
 	}
-	fmt.Printf("\nNext: edit %s, set BUNNY_API_KEY, then run: vabbit-deploy apply\n", *file)
+	fmt.Printf("\nNext: edit %s, set BUNNY_API_KEY, then run: vabbit deploy apply\n", *file)
 	return nil
 }
 
@@ -204,7 +197,7 @@ func cmdApply(ctx context.Context, args []string, dry bool) error {
 	if dry {
 		name = "plan"
 	}
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	fs := flag.NewFlagSet("deploy "+name, flag.ExitOnError)
 	c := commonFlags(fs)
 	allowCIDR := fs.Bool("allow-cidr-change", false, "allow changing a network's CIDR (strands every enrolled device)")
 	fs.Parse(args)
@@ -247,7 +240,7 @@ func applyNetwork(ctx context.Context, client *bunny.Client, lg *login, n config
 			return fmt.Errorf("network %s: %w", n.Name, err)
 		}
 		if has {
-			return fmt.Errorf("network %s is already deployed, but its admin token is not in %s. Copy admin.json from whoever deployed it, or replace the token with: vabbit-deploy rotate-admin -n %s", n.Name, lg.path, n.Name)
+			return fmt.Errorf("network %s is already deployed, but its admin token is not in %s. Copy admin.json from whoever deployed it, or replace the token with: vabbit deploy rotate-admin -n %s", n.Name, lg.path, n.Name)
 		}
 		if err := lg.ensureToken(n.Name); err != nil {
 			return err
@@ -276,7 +269,7 @@ func applyNetwork(ctx context.Context, client *bunny.Client, lg *login, n config
 }
 
 func cmdStatus(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	fs := flag.NewFlagSet("deploy status", flag.ExitOnError)
 	c := commonFlags(fs)
 	fs.Parse(args)
 	_, nets, client, err := c.load()
@@ -299,7 +292,7 @@ func cmdStatus(ctx context.Context, args []string) error {
 }
 
 func cmdRotate(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("rotate-admin", flag.ExitOnError)
+	fs := flag.NewFlagSet("deploy rotate-admin", flag.ExitOnError)
 	c := commonFlags(fs)
 	fs.Parse(args)
 	if c.network == "" {
@@ -330,7 +323,7 @@ func cmdRotate(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("New admin token for %s stored in %s; deploying it.\n", n.Name, lg.path)
 	if err := applyNetwork(ctx, client, lg, n, code, false); err != nil {
-		return fmt.Errorf("%w (the new token is saved; run vabbit-deploy apply to finish)", err)
+		return fmt.Errorf("%w (the new token is saved; run vabbit deploy apply to finish)", err)
 	}
 	fmt.Println("The old token no longer works. Devices are not affected; check `vabbit keys ls`")
 	fmt.Println("and `vabbit devices ls` if the old token may have leaked.")
@@ -338,7 +331,7 @@ func cmdRotate(ctx context.Context, args []string) error {
 }
 
 func cmdDestroy(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("destroy", flag.ExitOnError)
+	fs := flag.NewFlagSet("deploy destroy", flag.ExitOnError)
 	c := commonFlags(fs)
 	yes := fs.Bool("yes", false, "don't ask for confirmation")
 	fs.Parse(args)
@@ -402,7 +395,7 @@ func waitHealthy(ctx context.Context, url string) {
 			return
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
-			fmt.Printf("  not answering yet (%s); a new hostname can take a few minutes. Check with: vabbit-deploy status\n", h)
+			fmt.Printf("  not answering yet (%s); a new hostname can take a few minutes. Check with: vabbit deploy status\n", h)
 			return
 		}
 		time.Sleep(3 * time.Second)
