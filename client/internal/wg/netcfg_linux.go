@@ -53,7 +53,7 @@ func (d *Device) SetForwarding(on bool) error {
 }
 
 // serveUAPI exposes the standard WireGuard control socket (root only) so
-// `wg show` and `edgeguard status` work. Failure is not fatal.
+// `wg show` and `vabbit status` work. Failure is not fatal.
 func serveUAPI(name string, dev *device.Device) func() {
 	f, err := ipc.UAPIOpen(name)
 	if err != nil {

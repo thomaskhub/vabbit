@@ -1,4 +1,4 @@
-// Package config reads edgeguard.toml, the description of the networks to
+// Package config reads vabbit.toml, the description of the networks to
 // deploy on bunny.net.
 package config
 
@@ -16,7 +16,7 @@ type File struct {
 	// key. The key itself never goes in the file.
 	APIKeyEnv string `toml:"api_key_env"`
 	// Script is the built edge script (edge/dist/edge-script.js). Empty means
-	// the copy built into edgeguard-deploy.
+	// the copy built into vabbit-deploy.
 	Script   string    `toml:"script"`
 	Networks []Network `toml:"network"`
 }
@@ -86,10 +86,10 @@ func (f *File) normalize() error {
 			return fmt.Errorf("network %q: cidr %q must be an IPv4 network between /8 and /28", n.Name, n.CIDR)
 		}
 		if n.ScriptName == "" {
-			n.ScriptName = "edgeguard-" + n.Name
+			n.ScriptName = "vabbit-" + n.Name
 		}
 		if n.StorageZone == "" {
-			n.StorageZone = "edgeguard-" + n.Name + "-state"
+			n.StorageZone = "vabbit-" + n.Name + "-state"
 		}
 		if !nameRE.MatchString(n.ScriptName) || !zoneRE.MatchString(n.StorageZone) {
 			return fmt.Errorf("network %q: script_name and storage_zone use lowercase letters, digits and dashes", n.Name)
@@ -124,10 +124,10 @@ func (f File) Network(name string) (Network, bool) {
 	return Network{}, false
 }
 
-// Example is written by `edgeguard-deploy init`.
-const Example = `# EdgeGuard networks on bunny.net. Deploy with:
+// Example is written by `vabbit-deploy init`.
+const Example = `# Vabbit networks on bunny.net. Deploy with:
 #   export BUNNY_API_KEY=...        # Account settings > API key
-#   edgeguard-deploy apply
+#   vabbit-deploy apply
 #
 # Each [[network]] becomes one edge script and one private storage zone.
 
@@ -135,12 +135,12 @@ const Example = `# EdgeGuard networks on bunny.net. Deploy with:
 api_key_env = "BUNNY_API_KEY"
 
 [[network]]
-name = "home"                    # shown by "edgeguard login"
+name = "home"                    # shown by "vabbit login"
 cidr = "100.92.0.0/16"           # VPN addresses; cannot change once devices exist
 storage_region = "DE"            # DE, NY, LA or SG
 # replication_regions = ["NY"]
-# script_name = "edgeguard-home"          # default edgeguard-<name>
-# storage_zone = "edgeguard-home-state"   # default edgeguard-<name>-state
+# script_name = "vabbit-home"          # default vabbit-<name>
+# storage_zone = "vabbit-home-state"   # default vabbit-<name>-state
 # admin_token_sha256 = ""        # empty: a token is generated on the first apply
 
 # [[network]]

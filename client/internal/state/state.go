@@ -29,17 +29,17 @@ type Admin struct {
 	Token  string `json:"token"`
 }
 
-const DefaultDir = "/var/lib/edgeguard"
+const DefaultDir = "/var/lib/vabbit"
 
 func DevicePath(dir, iface string) string { return filepath.Join(dir, iface+".json") }
 
-// AdminPath is ~/.config/edgeguard/admin.json for the invoking user, also
-// under sudo, so `sudo edgeguard up` can reuse the admin login.
+// AdminPath is ~/.config/vabbit/admin.json for the invoking user, also
+// under sudo, so `sudo vabbit up` can reuse the admin login.
 func AdminPath() (string, error) {
 	if os.Geteuid() == 0 {
 		if su := os.Getenv("SUDO_USER"); su != "" {
 			if u, err := user.Lookup(su); err == nil {
-				return filepath.Join(u.HomeDir, ".config", "edgeguard", "admin.json"), nil
+				return filepath.Join(u.HomeDir, ".config", "vabbit", "admin.json"), nil
 			}
 		}
 	}
@@ -47,7 +47,7 @@ func AdminPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "edgeguard", "admin.json"), nil
+	return filepath.Join(dir, "vabbit", "admin.json"), nil
 }
 
 // Load reads JSON into v. It returns os.ErrNotExist if the file is missing and

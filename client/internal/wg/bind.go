@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"edgeguard/internal/stun"
+	"vabbit/internal/stun"
 
 	"golang.zx2c4.com/wireguard/conn"
 )

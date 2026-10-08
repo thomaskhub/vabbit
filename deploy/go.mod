@@ -1,4 +1,4 @@
-module edgeguard-deploy
+module vabbit-deploy
 
 go 1.23.1
 

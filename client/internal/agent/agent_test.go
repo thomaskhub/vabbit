@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"edgeguard/internal/api"
-	"edgeguard/internal/wg"
+	"vabbit/internal/api"
+	"vabbit/internal/wg"
 )
 
 const (

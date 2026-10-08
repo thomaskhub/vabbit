@@ -1,4 +1,4 @@
-// Package api is a minimal client for the EdgeGuard control plane.
+// Package api is a minimal client for the Vabbit control plane.
 package api
 
 import (

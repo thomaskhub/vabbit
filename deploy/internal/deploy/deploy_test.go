@@ -14,8 +14,8 @@ import (
 	"sync"
 	"testing"
 
-	"edgeguard-deploy/internal/bunny"
-	"edgeguard-deploy/internal/config"
+	"vabbit-deploy/internal/bunny"
+	"vabbit-deploy/internal/config"
 )
 
 // fakeBunny is an in-memory stand-in for the parts of api.bunny.net we use.
@@ -171,17 +171,17 @@ func TestApplyCreatesEverythingThenIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, out.String())
 	}
-	if res.URL != "https://edgeguard-home.b-cdn.net" || !strings.HasPrefix(res.AdminToken, "ega_") {
+	if res.URL != "https://vabbit-home.b-cdn.net" || !strings.HasPrefix(res.AdminToken, "vba_") {
 		t.Fatalf("result %+v", res)
 	}
-	s := f.script("edgeguard-home")
+	s := f.script("vabbit-home")
 	if s.live != "code-v1" || f.publishN != 1 {
 		t.Fatalf("not published: live=%q publishes=%d", s.live, f.publishN)
 	}
-	if s.secrets["ADMIN_TOKEN_SHA256"] != sha(res.AdminToken) || s.secrets["STORAGE_ACCESS_KEY"] != "zone-pw-edgeguard-home-state" {
+	if s.secrets["ADMIN_TOKEN_SHA256"] != sha(res.AdminToken) || s.secrets["STORAGE_ACCESS_KEY"] != "zone-pw-vabbit-home-state" {
 		t.Fatalf("secrets %v", s.secrets)
 	}
-	for k, v := range map[string]string{"NETWORK_NAME": "home", "NETWORK_CIDR": "100.92.0.0/16", "STORAGE_ZONE": "edgeguard-home-state", "STORAGE_HOST": "storage.bunnycdn.com"} {
+	for k, v := range map[string]string{"NETWORK_NAME": "home", "NETWORK_CIDR": "100.92.0.0/16", "STORAGE_ZONE": "vabbit-home-state", "STORAGE_HOST": "storage.bunnycdn.com"} {
 		if s.vars[k] != v {
 			t.Fatalf("var %s=%q want %q", k, s.vars[k], v)
 		}
@@ -250,21 +250,21 @@ func TestPinnedHashAndRotation(t *testing.T) {
 	ctx := context.Background()
 	f, c := newFake(t)
 	n := network(t)
-	n.AdminTokenSHA256 = sha("ega_one")
+	n.AdminTokenSHA256 = sha("vba_one")
 	res, err := Apply(ctx, c, n, "code", Options{Out: &bytes.Buffer{}})
 	if err != nil || res.AdminToken != "" {
 		t.Fatalf("%v %+v", err, res)
 	}
 	s := f.script(n.ScriptName)
-	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("ega_one") {
+	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("vba_one") {
 		t.Fatal("pinned hash not set")
 	}
 	// Changing the pinned hash in the config rotates the token.
-	n.AdminTokenSHA256 = sha("ega_two")
+	n.AdminTokenSHA256 = sha("vba_two")
 	if res, err = Apply(ctx, c, n, "code", Options{Out: &bytes.Buffer{}}); err != nil || !res.Changed {
 		t.Fatal(err)
 	}
-	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("ega_two") {
+	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("vba_two") {
 		t.Fatal("pinned hash not updated")
 	}
 	if _, err := RotateAdmin(ctx, c, n); err == nil {

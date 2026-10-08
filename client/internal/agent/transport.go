@@ -3,7 +3,7 @@ package agent
 import (
 	"time"
 
-	"edgeguard/internal/wg"
+	"vabbit/internal/wg"
 )
 
 // transport decides whether traffic to the hub goes over UDP or through the

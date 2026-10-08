@@ -6,8 +6,8 @@ test:
 edge:
 	cd edge && bun run build
 client:
-	cd client && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/edgeguard ./cmd/edgeguard
+	cd client && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/vabbit ./cmd/vabbit
 deploy: edge
 	cp edge/dist/edge-script.js deploy/edgescript/bundle/
-	cd deploy && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/edgeguard-deploy ./cmd/edgeguard-deploy
+	cd deploy && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/vabbit-deploy ./cmd/vabbit-deploy
 build: edge client deploy

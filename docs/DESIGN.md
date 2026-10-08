@@ -1,6 +1,6 @@
-# EdgeGuard design
+# Vabbit design
 
-EdgeGuard is a tiny WireGuard management plane. The control plane is a single
+Vabbit is a tiny WireGuard management plane. The control plane is a single
 Bunny.net Edge Script. **One deployed edge script is one network**: to run two
 isolated VPNs, deploy the script twice with different storage zones.
 
@@ -14,22 +14,22 @@ endpoints its peers have.
 |---|---|---|
 | `edge/` | Bunny Edge Script (TypeScript) | HTTP API: setup keys, enrollment, device list, peer sync |
 | Bunny Storage zone | Bunny | Holds small JSON records (devices, setup keys). No secrets, only hashes |
-| `client/` | Go binary `edgeguard` (Linux first) | Admin CLI and the device agent that configures WireGuard |
+| `client/` | Go binary `vabbit` (Linux first) | Admin CLI and the device agent that configures WireGuard |
 
 ## Credentials
 
 There are three kinds of token, all 256-bit random values. The server stores
 only their SHA-256 hashes and compares in constant time.
 
-1. **Admin token** (`ega_…`). Generated once with `edgeguard admin-token`. Its
+1. **Admin token** (`vba_…`). Generated once with `vabbit admin-token`. Its
    SHA-256 goes into the edge script secret `ADMIN_TOKEN_SHA256`. The plaintext
-   lives only in the admin's `~/.config/edgeguard/admin.json` (mode 0600) after
-   `edgeguard login`.
-2. **Setup key** (`egk_…`). Created by the admin. One-time by default, with an
+   lives only in the admin's `~/.config/vabbit/admin.json` (mode 0600) after
+   `vabbit login`.
+2. **Setup key** (`vbk_…`). Created by the admin. One-time by default, with an
    expiry (default 24h, or never) and optional use limit. Used once by a device
    to enroll. Can carry a device lifetime (`--device-ttl`): devices enrolled
    with it get an `expiresAt`. Revoked by deleting it.
-3. **Device token** (`egd_<id>.<secret>`). Returned once at enrollment. The
+3. **Device token** (`vbd_<id>.<secret>`). Returned once at enrollment. The
    device uses it to sync. Deleting the device revokes it; so does reaching its
    `expiresAt` (the admin can set or clear that later). Expired devices are
    left out of every peer list and their record is deleted on their next call.
@@ -37,20 +37,20 @@ only their SHA-256 hashes and compares in constant time.
 ## Device flow
 
 ```
-admin:  edgeguard login --server https://net1.b-cdn.net --token ega_...
-admin:  edgeguard keys create            -> egk_...
-device: sudo edgeguard up --server https://net1.b-cdn.net --setup-key egk_...
+admin:  vabbit login --server https://net1.b-cdn.net --token vba_...
+admin:  vabbit keys create            -> vbk_...
+device: sudo vabbit up --server https://net1.b-cdn.net --setup-key vbk_...
           1. generate X25519 keypair locally (private key never leaves the box)
           2. POST /api/v1/enroll {setupKey, name, publicKey, endpoint?}
              <- device id, VPN IP, device token
-          3. start embedded WireGuard on eg0, set IP, loop: POST /api/v1/sync every 15s,
+          3. start embedded WireGuard on vb0, set IP, loop: POST /api/v1/sync every 15s,
              STUN + hole punch towards every peer (see below)
-admin:  edgeguard devices rm <id>        -> device's next sync gets 401,
+admin:  vabbit devices rm <id>        -> device's next sync gets 401,
                                             agent tears the interface down,
                                             every other peer drops it
 ```
 
-If the admin is logged in on the device itself, `sudo edgeguard up --server …`
+If the admin is logged in on the device itself, `sudo vabbit up --server …`
 mints a one-time setup key automatically.
 
 ## Connectivity model (NAT traversal)

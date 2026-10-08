@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"edgeguard/internal/api"
-	"edgeguard/internal/relay"
-	"edgeguard/internal/state"
-	"edgeguard/internal/wg"
+	"vabbit/internal/api"
+	"vabbit/internal/relay"
+	"vabbit/internal/state"
+	"vabbit/internal/wg"
 )
 
 // ErrRemoved means the control plane no longer knows this device.
@@ -203,7 +203,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 }
 
-// TransportFile records how this device reaches the hub, for `edgeguard status`.
+// TransportFile records how this device reaches the hub, for `vabbit status`.
 func TransportFile(iface string) string { return "/var/run/wireguard/" + iface + ".transport" }
 
 func writeTransport(iface, s string) { _ = os.WriteFile(TransportFile(iface), []byte(s+"\n"), 0o600) }

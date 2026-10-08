@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Vabbit logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <g fill="#f8fafc">
+    <path d="M57 74 C 46 58, 34 34, 36 18 C 38 6, 50 6, 55 18 C 60 32, 63 54, 63 74 Z"/>
+    <path d="M71 74 C 82 58, 94 34, 92 18 C 90 6, 78 6, 73 18 C 68 32, 65 54, 65 74 Z"/>
+  </g>
+  <g fill="#f9a8d4" opacity=".9">
+    <path d="M57 64 C 50 52, 43 36, 44 24 C 45 16, 50 16, 52 23 C 55 34, 58 50, 59 64 Z"/>
+    <path d="M71 64 C 78 52, 85 36, 84 24 C 83 16, 78 16, 76 23 C 73 34, 70 50, 69 64 Z"/>
+  </g>
+  <path d="M20 62 L64 108 L108 62" fill="none" stroke="#5eead4" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M41 84 L87 84" fill="none" stroke="#5eead4" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round" opacity=".85"/>
+  <g fill="#f8fafc" stroke="#134e4a" stroke-width="3">
+    <circle cx="20" cy="62" r="7"/><circle cx="41" cy="84" r="7"/><circle cx="64" cy="108" r="9"/>
+    <circle cx="87" cy="84" r="7"/><circle cx="108" cy="62" r="7"/>
+  </g>
+</svg>

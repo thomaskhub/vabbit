@@ -1,15 +1,15 @@
-# Deploying networks with `edgeguard-deploy`
+# Deploying networks with `vabbit-deploy`
 
-`edgeguard-deploy` sets up everything on bunny.net from one TOML file: a private
+`vabbit-deploy` sets up everything on bunny.net from one TOML file: a private
 storage zone and an edge script per network, with all variables and secrets, then
 publishes it. Run it again whenever you like; it only changes what differs.
 
 ## Setup
 
 ```console
-$ make deploy                         # builds dist/edgeguard-deploy with the edge script inside
+$ make deploy                         # builds dist/vabbit-deploy with the edge script inside
 $ export BUNNY_API_KEY=...            # bunny.net > Account settings > API key
-$ edgeguard-deploy init               # writes edgeguard.toml
+$ vabbit-deploy init               # writes vabbit.toml
 ```
 
 ```toml
@@ -31,43 +31,43 @@ cidr = "100.93.0.0/16"
 | `cidr` | `100.92.0.0/16` | VPN addresses. Can't change once devices exist |
 | `storage_region` | `DE` | Main region of the storage zone |
 | `replication_regions` | none | Extra storage regions, e.g. `["NY"]` |
-| `script_name` | `edgeguard-<name>` | Edge script name, also its `*.b-cdn.net` hostname |
-| `storage_zone` | `edgeguard-<name>-state` | Storage zone name |
+| `script_name` | `vabbit-<name>` | Edge script name, also its `*.b-cdn.net` hostname |
+| `storage_zone` | `vabbit-<name>-state` | Storage zone name |
 | `admin_token_sha256` | generated | Pin the admin token hash yourself instead |
 | `script` (top level) | built in | Path to a different `edge-script.js` |
 
 ## Commands
 
 ```console
-$ edgeguard-deploy plan               # shows what would change, changes nothing
+$ vabbit-deploy plan               # shows what would change, changes nothing
 network home
-  would create storage zone edgeguard-home-state in DE
-  would create edge script edgeguard-home with its own pull zone
+  would create storage zone vabbit-home-state in DE
+  would create edge script vabbit-home with its own pull zone
   ...
 
-$ edgeguard-deploy apply
+$ vabbit-deploy apply
 network home
-  create storage zone edgeguard-home-state in DE
-  create edge script edgeguard-home with its own pull zone
+  create storage zone vabbit-home-state in DE
+  create edge script vabbit-home with its own pull zone
   set secret STORAGE_ACCESS_KEY
   generate an admin token
   set secret ADMIN_TOKEN_SHA256
   set NETWORK_NAME=home
   ...
   publish
-  url https://edgeguard-home.b-cdn.net
+  url https://vabbit-home.b-cdn.net
   healthy
 
   New admin token for home (shown once, keep it secret):
-    ega_...
-  Log in with: edgeguard login --server https://edgeguard-home.b-cdn.net
+    vba_...
+  Log in with: vabbit login --server https://vabbit-home.b-cdn.net
 
-$ edgeguard-deploy status
+$ vabbit-deploy status
 NETWORK      URL                                      HEALTH
-home         https://edgeguard-home.b-cdn.net         ok
+home         https://vabbit-home.b-cdn.net         ok
 
-$ edgeguard-deploy rotate-admin -n home   # new admin token; devices keep working
-$ edgeguard-deploy destroy -n home        # asks you to type the name first
+$ vabbit-deploy rotate-admin -n home   # new admin token; devices keep working
+$ vabbit-deploy destroy -n home        # asks you to type the name first
 ```
 
 `-f FILE` picks another config file and `-n NAME` limits a command to one network.

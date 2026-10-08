@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "edgeguard-edge",
+      "name": "vabbit-edge",
       "devDependencies": {
         "@types/bun": "1.2.20",
         "typescript": "5.8.3",

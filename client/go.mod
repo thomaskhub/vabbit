@@ -1,4 +1,4 @@
-module edgeguard
+module vabbit
 
 go 1.23.1
 

@@ -1,4 +1,4 @@
-// The EdgeGuard control plane API. Pure request -> response; storage is injected.
+// The Vabbit control plane API. Pure request -> response; storage is injected.
 
 import { isWireGuardKey, randomId, randomToken, sha256Hex, timingSafeEqual } from "./crypto.ts";
 import { allocate, type Cidr, parseCidr } from "./ipam.ts";
@@ -164,14 +164,14 @@ class Api {
   private async requireAdmin(req: Request): Promise<void> {
     const token = this.bearer(req);
     const hash = await sha256Hex(token);
-    if (!token.startsWith("ega_") || !timingSafeEqual(hash, this.cfg.adminTokenSha256)) {
+    if (!token.startsWith("vba_") || !timingSafeEqual(hash, this.cfg.adminTokenSha256)) {
       throw new HttpError(401, "unauthorized");
     }
   }
 
   private async requireDevice(req: Request): Promise<Device> {
     const token = this.bearer(req);
-    const m = /^egd_([0-9a-f]{16})\.[A-Za-z0-9_-]{43}$/.exec(token);
+    const m = /^vbd_([0-9a-f]{16})\.[A-Za-z0-9_-]{43}$/.exec(token);
     if (!m) throw new HttpError(401, "unauthorized");
     const [dev, hash] = await Promise.all([
       this.store.get<Device>(`devices/${m[1]}.json`),
@@ -197,7 +197,7 @@ class Api {
     const maxUses = optInt(body.maxUses, "maxUses", 0, 100000) ?? (reusable ? 0 : 1);
     if (!reusable && maxUses !== 1) throw new HttpError(400, "one-time keys have maxUses 1");
 
-    const key = randomToken("egk_");
+    const key = randomToken("vbk_");
     const hash = await sha256Hex(key);
     const t = this.now();
     const rec: SetupKey = {
@@ -231,7 +231,7 @@ class Api {
 
   /** Validates a setup key and consumes one use. */
   private async consumeSetupKey(key: unknown): Promise<SetupKey> {
-    if (typeof key !== "string" || !/^egk_[A-Za-z0-9_-]{43}$/.test(key)) {
+    if (typeof key !== "string" || !/^vbk_[A-Za-z0-9_-]{43}$/.test(key)) {
       throw new HttpError(401, "invalid setup key");
     }
     const hash = await sha256Hex(key);
@@ -275,7 +275,7 @@ class Api {
     if (!ip) throw new HttpError(507, "network is full");
 
     const id = randomId();
-    const token = `egd_${id}.${randomToken("", 32)}`;
+    const token = `vbd_${id}.${randomToken("", 32)}`;
     const t = this.now();
     const dev: Device = {
       id,

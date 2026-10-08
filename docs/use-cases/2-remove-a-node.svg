@@ -21,14 +21,14 @@
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">1</text>
     <text x="40" y="19" class="step">Find the node's ID</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">edgeguard devices ls</text>
+    <text x="52" y="50" class="code">vabbit devices ls</text>
   </g>
   <g transform="translate(30,180)">
     <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">2</text>
     <text x="40" y="19" class="step">Remove it (from any admin machine)</text>
     <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
-    <text x="52" y="50" class="code">edgeguard devices rm 93459a6a15040499</text>
-    <text x="40" y="78" font-size="13" class="m">Or, on the node itself: <tspan class="code">sudo edgeguard leave</tspan></text>
+    <text x="52" y="50" class="code">vabbit devices rm 93459a6a15040499</text>
+    <text x="40" y="78" font-size="13" class="m">Or, on the node itself: <tspan class="code">sudo vabbit leave</tspan></text>
   </g>
   <g transform="translate(30,290)">
     <text x="0" y="16" class="step">What happens next</text>
@@ -42,7 +42,7 @@
     <text x="44" y="131" class="tl">peer. Packets from its key are rejected from then on.</text>
     <circle cx="22" cy="177" r="7" fill="#6b7280"/>
     <text x="44" y="173" class="tl" font-weight="600">≤ 15 s · on the Pi (if it's online)</text>
-    <text x="44" y="191" class="tl">Its sync is refused, so the agent removes the eg0 interface and</text>
+    <text x="44" y="191" class="tl">Its sync is refused, so the agent removes the vb0 interface and</text>
     <text x="44" y="208" class="tl">deletes its keys. If it's offline, it simply never gets back in.</text>
     <text x="0" y="262" font-size="13" class="m">To bring it back later it needs a fresh setup key. For temporary machines, create</text>
     <text x="0" y="280" font-size="13" class="m">the key with <tspan class="code">--device-ttl 7d</tspan> and they remove themselves automatically.</text>

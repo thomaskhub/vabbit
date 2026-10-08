@@ -1,13 +1,13 @@
 # Runs the agent for an enrolled interface. Enroll once with
-# `sudo edgeguard up --dry-run --server ... --setup-key ...`, then:
-#   systemctl enable --now edgeguard@eg0
+# `sudo vabbit up --dry-run --server ... --setup-key ...`, then:
+#   systemctl enable --now vabbit@vb0
 [Unit]
-Description=EdgeGuard WireGuard agent (%i)
+Description=Vabbit WireGuard agent (%i)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/edgeguard up --iface %i
+ExecStart=/usr/local/bin/vabbit up --iface %i
 Restart=on-failure
 RestartSec=10
 # Needs to manage network interfaces; everything else is locked down.
@@ -16,13 +16,13 @@ CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/edgeguard /proc/sys/net/ipv4/conf
-# Control socket for `edgeguard status` / `wg show`.
+ReadWritePaths=/var/lib/vabbit /proc/sys/net/ipv4/conf
+# Control socket for `vabbit status` / `wg show`.
 RuntimeDirectory=wireguard
 RuntimeDirectoryMode=0700
 RuntimeDirectoryPreserve=yes
 DeviceAllow=/dev/net/tun rw
-StateDirectory=edgeguard
+StateDirectory=vabbit
 StateDirectoryMode=0700
 ProtectHome=true
 PrivateTmp=true

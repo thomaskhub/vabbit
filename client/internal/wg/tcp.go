@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"edgeguard/internal/relay"
+	"vabbit/internal/relay"
 
 	"golang.zx2c4.com/wireguard/conn"
 )

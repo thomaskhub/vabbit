@@ -1,4 +1,4 @@
-// Command edgeguard is the EdgeGuard admin CLI and device agent.
+// Command vabbit is the Vabbit admin CLI and device agent.
 package main
 
 import (
@@ -21,35 +21,35 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"edgeguard/internal/agent"
-	"edgeguard/internal/api"
-	"edgeguard/internal/state"
-	"edgeguard/internal/wg"
+	"vabbit/internal/agent"
+	"vabbit/internal/api"
+	"vabbit/internal/state"
+	"vabbit/internal/wg"
 )
 
 var version = "dev"
 
-const usage = `edgeguard - tiny WireGuard networks managed from a Bunny Edge Script
+const usage = `vabbit - tiny WireGuard networks managed from a Bunny Edge Script
 
 Admin:
-  edgeguard admin-token                       generate an admin token and its SHA-256 for the edge script
-  edgeguard login --server URL [--token T]    save admin credentials (prompts for the token if omitted)
-  edgeguard logout
-  edgeguard keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
-  edgeguard keys ls
-  edgeguard keys rm ID
-  edgeguard devices ls
-  edgeguard devices rm ID
-  edgeguard devices set ID [--name NAME] [--hub=true|false] [--expires 7d|never]
+  vabbit admin-token                       generate an admin token and its SHA-256 for the edge script
+  vabbit login --server URL [--token T]    save admin credentials (prompts for the token if omitted)
+  vabbit logout
+  vabbit keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
+  vabbit keys ls
+  vabbit keys rm ID
+  vabbit devices ls
+  vabbit devices rm ID
+  vabbit devices set ID [--name NAME] [--hub=true|false] [--expires 7d|never]
 
 Device (Linux, run as root):
-  edgeguard up [--server URL] [--setup-key KEY] [--name NAME] [--endpoint HOST:PORT] [--hub]
-               [--port 51820] [--iface eg0] [--interval 15s] [--stun host:port,...] [--dry-run]
-  edgeguard down [--iface eg0]
-  edgeguard leave [--iface eg0]               remove this device from the network
-  edgeguard status [--iface eg0]
+  vabbit up [--server URL] [--setup-key KEY] [--name NAME] [--endpoint HOST:PORT] [--hub]
+               [--port 51820] [--iface vb0] [--interval 15s] [--stun host:port,...] [--dry-run]
+  vabbit down [--iface vb0]
+  vabbit leave [--iface vb0]               remove this device from the network
+  vabbit status [--iface vb0]
 
-The setup key can also be passed in EDGEGUARD_SETUP_KEY to keep it out of the process list.
+The setup key can also be passed in VABBIT_SETUP_KEY to keep it out of the process list.
 `
 
 func main() {
@@ -102,9 +102,9 @@ func cmdAdminToken() error {
 	if _, err := rand.Read(b); err != nil {
 		return err
 	}
-	tok := "ega_" + base64.RawURLEncoding.EncodeToString(b)
+	tok := "vba_" + base64.RawURLEncoding.EncodeToString(b)
 	sum := sha256.Sum256([]byte(tok))
-	fmt.Printf("Admin token (keep secret, give to `edgeguard login`):\n  %s\n\n", tok)
+	fmt.Printf("Admin token (keep secret, give to `vabbit login`):\n  %s\n\n", tok)
 	fmt.Printf("Set this as the edge script secret ADMIN_TOKEN_SHA256:\n  %s\n", hex.EncodeToString(sum[:]))
 	return nil
 }
@@ -164,7 +164,7 @@ func adminClient() (*api.Client, state.Admin, error) {
 	}
 	if err := state.Load(path, &a); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, a, errors.New("not logged in; run `edgeguard login --server URL`")
+			return nil, a, errors.New("not logged in; run `vabbit login --server URL`")
 		}
 		return nil, a, err
 	}
@@ -174,7 +174,7 @@ func adminClient() (*api.Client, state.Admin, error) {
 
 func cmdKeys(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: edgeguard keys create|ls|rm")
+		return errors.New("usage: vabbit keys create|ls|rm")
 	}
 	c, _, err := adminClient()
 	if err != nil {
@@ -205,7 +205,7 @@ func cmdKeys(ctx context.Context, args []string) error {
 		if k.DeviceTTLSeconds != nil {
 			devices = "devices lose access " + humanDuration(time.Duration(*k.DeviceTTLSeconds)*time.Second) + " after joining"
 		}
-		fmt.Fprintf(os.Stderr, "id %s, key expires %s, %s. On the device run:\n  sudo EDGEGUARD_SETUP_KEY=%s edgeguard up --server <URL>\n",
+		fmt.Fprintf(os.Stderr, "id %s, key expires %s, %s. On the device run:\n  sudo VABBIT_SETUP_KEY=%s vabbit up --server <URL>\n",
 			k.ID, whenOrNever(k.ExpiresAt), devices, k.Key)
 	case "ls":
 		keys, err := c.ListSetupKeys(ctx)
@@ -228,7 +228,7 @@ func cmdKeys(ctx context.Context, args []string) error {
 		w.Flush()
 	case "rm":
 		if len(args) != 2 {
-			return errors.New("usage: edgeguard keys rm ID")
+			return errors.New("usage: vabbit keys rm ID")
 		}
 		return c.DeleteSetupKey(ctx, args[1])
 	default:
@@ -239,7 +239,7 @@ func cmdKeys(ctx context.Context, args []string) error {
 
 func cmdDevices(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: edgeguard devices ls|rm|set")
+		return errors.New("usage: vabbit devices ls|rm|set")
 	}
 	c, _, err := adminClient()
 	if err != nil {
@@ -271,7 +271,7 @@ func cmdDevices(ctx context.Context, args []string) error {
 		w.Flush()
 	case "rm":
 		if len(args) != 2 {
-			return errors.New("usage: edgeguard devices rm ID")
+			return errors.New("usage: vabbit devices rm ID")
 		}
 		if err := c.DeleteDevice(ctx, args[1]); err != nil {
 			return err
@@ -279,7 +279,7 @@ func cmdDevices(ctx context.Context, args []string) error {
 		fmt.Println("Removed. Other devices drop it on their next sync.")
 	case "set":
 		if len(args) < 2 {
-			return errors.New("usage: edgeguard devices set ID [--name NAME] [--hub=true|false] [--expires 7d|never]")
+			return errors.New("usage: vabbit devices set ID [--name NAME] [--hub=true|false] [--expires 7d|never]")
 		}
 		fs := flag.NewFlagSet("devices set", flag.ExitOnError)
 		name := fs.String("name", "", "new name")
@@ -330,7 +330,7 @@ type deviceFlags struct {
 
 func addDeviceFlags(fs *flag.FlagSet) deviceFlags {
 	return deviceFlags{
-		iface:    fs.String("iface", "eg0", "WireGuard interface name"),
+		iface:    fs.String("iface", "vb0", "WireGuard interface name"),
 		stateDir: fs.String("state-dir", state.DefaultDir, "where enrollment state is kept"),
 	}
 }
@@ -360,7 +360,7 @@ func cmdUp(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("up", flag.ExitOnError)
 	df := addDeviceFlags(fs)
 	server := fs.String("server", "", "control plane URL (only needed for the first run)")
-	setupKey := fs.String("setup-key", os.Getenv("EDGEGUARD_SETUP_KEY"), "one-time setup key (first run)")
+	setupKey := fs.String("setup-key", os.Getenv("VABBIT_SETUP_KEY"), "one-time setup key (first run)")
 	name := fs.String("name", "", "device name (default: hostname)")
 	endpoint := fs.String("endpoint", "", "public HOST:PORT other devices can reach this one on")
 	hub := fs.Bool("hub", false, "make this device the hub that relays for devices behind NAT (needs --endpoint and an admin login)")
@@ -404,7 +404,7 @@ func cmdUp(ctx context.Context, args []string) error {
 	default:
 		if *server != "" {
 			if base, err := api.ValidateServer(*server); err != nil || base != dev.Server {
-				return fmt.Errorf("this interface is enrolled with %s; use another --iface or `edgeguard leave` first", dev.Server)
+				return fmt.Errorf("this interface is enrolled with %s; use another --iface or `vabbit leave` first", dev.Server)
 			}
 		}
 		// Flags given on later runs update the stored settings.
@@ -530,7 +530,7 @@ func setHub(ctx context.Context, c *api.Client, dev state.Device, hub bool) erro
 	}
 	admin, a, err := adminClient()
 	if err != nil {
-		return fmt.Errorf("--hub needs an admin login on this machine (or run `edgeguard devices set %s --hub=%v` as admin): %w", dev.DeviceID, hub, err)
+		return fmt.Errorf("--hub needs an admin login on this machine (or run `vabbit devices set %s --hub=%v` as admin): %w", dev.DeviceID, hub, err)
 	}
 	if a.Server != dev.Server {
 		return errors.New("--hub: admin login is for a different server")
@@ -545,7 +545,7 @@ func enroll(ctx context.Context, server, setupKey, name, endpoint string, port i
 		// Fall back to the admin login: mint a one-time key for ourselves.
 		c, a, err := adminClient()
 		if err != nil {
-			return dev, errors.New("first run needs --server and --setup-key (or EDGEGUARD_SETUP_KEY), or an admin login")
+			return dev, errors.New("first run needs --server and --setup-key (or VABBIT_SETUP_KEY), or an admin login")
 		}
 		if server == "" {
 			server = a.Server
@@ -668,7 +668,7 @@ func cmdStatus(ctx context.Context, args []string) error {
 	var dev state.Device
 	if err := state.Load(path, &dev); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			fmt.Println("Not enrolled. Run `sudo edgeguard up --server URL --setup-key KEY`.")
+			fmt.Println("Not enrolled. Run `sudo vabbit up --server URL --setup-key KEY`.")
 			return nil
 		}
 		return err

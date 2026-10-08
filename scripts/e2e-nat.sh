@@ -34,8 +34,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-(cd client && go build -o "$W/edgeguard" ./cmd/edgeguard && go build -o "$W/stunserver" ./tools/stunserver)
-EG="$W/edgeguard"
+(cd client && go build -o "$W/vabbit" ./cmd/vabbit && go build -o "$W/stunserver" ./tools/stunserver)
+EG="$W/vabbit"
 unset HTTPS_PROXY https_proxy HTTP_PROXY http_proxy ALL_PROXY all_proxy # everything below is local
 x() { local n=$1; shift; ip netns exec "eg-$n" "$@"; }
 
@@ -76,7 +76,7 @@ setup() { # nat mode: cone | symmetric
   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=cp \
     -addext "subjectAltName=IP:9.9.9.20" -keyout "$W/key.pem" -out "$W/cert.pem" 2>/dev/null
   local out; out=$("$EG" admin-token)
-  TOKEN=$(grep -o 'ega_[A-Za-z0-9_-]*' <<<"$out")
+  TOKEN=$(grep -o 'vba_[A-Za-z0-9_-]*' <<<"$out")
   HASH=$(tail -1 <<<"$out" | tr -d ' ')
   (cd edge && ADMIN_TOKEN_SHA256=$HASH HOST=9.9.9.20 PORT=8787 TLS_CERT=$W/cert.pem TLS_KEY=$W/key.pem \
     exec ip netns exec eg-inet bun run src/dev.ts >"$W/server.log" 2>&1) & PIDS+=($!)
@@ -123,7 +123,7 @@ run() {
   x hub "$EG" login --server $SRV --token "$TOKEN" >/dev/null
   agent hub --endpoint 203.0.113.10:51820 --hub
   sleep 2
-  for n in lap phone; do EDGEGUARD_SETUP_KEY=$(x hub "$EG" keys create 2>/dev/null) agent "$n"; done
+  for n in lap phone; do VABBIT_SETUP_KEY=$(x hub "$EG" keys create 2>/dev/null) agent "$n"; done
 
   local want=direct
   [ "$mode" != cone ] && want=relay

@@ -39,11 +39,11 @@ jobs:
       - name: Build Linux binaries
         run: |
           for arch in amd64 arm64; do
-            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o dist/edgeguard-linux-$arch ./cmd/edgeguard
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o dist/vabbit-linux-$arch ./cmd/vabbit
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: edgeguard-linux
+          name: vabbit-linux
           path: client/dist/
 
   deploy:
@@ -62,8 +62,8 @@ jobs:
       - run: make deploy
       - uses: actions/upload-artifact@v4
         with:
-          name: edgeguard-deploy
-          path: dist/edgeguard-deploy
+          name: vabbit-deploy
+          path: dist/vabbit-deploy
 
   e2e:
     # Real WireGuard tunnels through emulated home NATs (network namespaces).

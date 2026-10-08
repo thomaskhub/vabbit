@@ -3,7 +3,7 @@ import { computePeers, createHandler, type Device, optEndpoint } from "../src/ha
 import { sha256Hex } from "../src/crypto.ts";
 import { MemoryStore } from "../src/store.ts";
 
-const ADMIN = "ega_" + "A".repeat(43);
+const ADMIN = "vba_" + "A".repeat(43);
 const KEY1 = "Ag3x3mJ0bWg3J7Ff2x7bX9H1t2Y8l9l3v0QkzQ9dQ3w=";
 const KEY2 = "bR8t1H4l2vN6pK0yW3qZ9cX5mJ7dF1sA2gE4hT6uY8o=";
 const KEY3 = "cC3t1H4l2vN6pK0yW3qZ9cX5mJ7dF1sA2gE4hT6uY8o=";
@@ -35,7 +35,7 @@ describe("admin auth", () => {
   test("rejects missing and wrong tokens", async () => {
     const { call } = await setup();
     expect((await call("GET", "/api/v1/network")).status).toBe(401);
-    expect((await call("GET", "/api/v1/network", undefined, "ega_" + "B".repeat(43))).status).toBe(401);
+    expect((await call("GET", "/api/v1/network", undefined, "vba_" + "B".repeat(43))).status).toBe(401);
     const ok = await call("GET", "/api/v1/network", undefined, ADMIN);
     expect(ok.status).toBe(200);
     expect(ok.body).toEqual({ name: "test", cidr: "100.92.0.0/24" });
@@ -55,7 +55,7 @@ describe("setup keys", () => {
     const { call } = await setup();
     const k = await call("POST", "/api/v1/setup-keys", {}, ADMIN);
     expect(k.status).toBe(201);
-    expect(k.body.key).toMatch(/^egk_[A-Za-z0-9_-]{43}$/);
+    expect(k.body.key).toMatch(/^vbk_[A-Za-z0-9_-]{43}$/);
     const a = await call("POST", "/api/v1/enroll", { setupKey: k.body.key, name: "a", publicKey: KEY1 });
     expect(a.status).toBe(201);
     const b = await call("POST", "/api/v1/enroll", { setupKey: k.body.key, name: "b", publicKey: KEY2 });
@@ -135,7 +135,7 @@ describe("devices and sync", () => {
     const b = await enroll(call, "b", KEY2);
     expect(a.device.ip).toMatch(/^100\.92\.0\.\d+$/);
     expect(a.device.ip).not.toBe(b.device.ip);
-    expect(a.deviceToken).toMatch(/^egd_[0-9a-f]{16}\.[A-Za-z0-9_-]{43}$/);
+    expect(a.deviceToken).toMatch(/^vbd_[0-9a-f]{16}\.[A-Za-z0-9_-]{43}$/);
     const key = (await call("POST", "/api/v1/setup-keys", {}, ADMIN)).body.key;
     expect((await call("POST", "/api/v1/enroll", { setupKey: key, name: "dup", publicKey: KEY1 })).status).toBe(409);
   });
@@ -160,7 +160,7 @@ describe("devices and sync", () => {
     expect(sa2.body.peers[0].endpoints).toEqual(cands);
     const sb2 = await call("POST", "/api/v1/sync", { candidates: cands }, b.deviceToken);
     expect(sb2.body.peers[0].endpoints).toEqual(["203.0.113.5:51820", "10.0.0.2:51820"]);
-    // A sync without candidates (e.g. `edgeguard status`) keeps the stored ones.
+    // A sync without candidates (e.g. `vabbit status`) keeps the stored ones.
     await call("POST", "/api/v1/sync", {}, b.deviceToken);
     const sa3 = await call("POST", "/api/v1/sync", { endpoint: "203.0.113.5:51820" }, a.deviceToken);
     expect(sa3.body.peers[0].endpoints).toEqual(cands);

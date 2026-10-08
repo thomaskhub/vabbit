@@ -1,4 +1,4 @@
-// edgeguard-deploy creates and updates EdgeGuard networks on bunny.net from
+// vabbit-deploy creates and updates Vabbit networks on bunny.net from
 // a TOML file.
 package main
 
@@ -14,22 +14,22 @@ import (
 	"strings"
 	"time"
 
-	"edgeguard-deploy/edgescript"
-	"edgeguard-deploy/internal/bunny"
-	"edgeguard-deploy/internal/config"
-	"edgeguard-deploy/internal/deploy"
+	"vabbit-deploy/edgescript"
+	"vabbit-deploy/internal/bunny"
+	"vabbit-deploy/internal/config"
+	"vabbit-deploy/internal/deploy"
 )
 
-const usage = `edgeguard-deploy: run EdgeGuard networks on bunny.net from a config file
+const usage = `vabbit-deploy: run Vabbit networks on bunny.net from a config file
 
-  edgeguard-deploy init                 write an example edgeguard.toml
-  edgeguard-deploy plan                 show what apply would change (changes nothing)
-  edgeguard-deploy apply                create or update every network in the file
-  edgeguard-deploy status               show each network's URL and health
-  edgeguard-deploy rotate-admin -n NAME replace a network's admin token
-  edgeguard-deploy destroy -n NAME      delete a network's edge script and storage
+  vabbit-deploy init                 write an example vabbit.toml
+  vabbit-deploy plan                 show what apply would change (changes nothing)
+  vabbit-deploy apply                create or update every network in the file
+  vabbit-deploy status               show each network's URL and health
+  vabbit-deploy rotate-admin -n NAME replace a network's admin token
+  vabbit-deploy destroy -n NAME      delete a network's edge script and storage
 
-Common flags: -f FILE (default edgeguard.toml), -n NAME (only this network).
+Common flags: -f FILE (default vabbit.toml), -n NAME (only this network).
 The Bunny API key is read from $BUNNY_API_KEY (or the variable named by
 api_key_env in the file).
 `
@@ -73,7 +73,7 @@ type common struct {
 
 func commonFlags(fs *flag.FlagSet) *common {
 	c := &common{}
-	fs.StringVar(&c.file, "f", "edgeguard.toml", "config file")
+	fs.StringVar(&c.file, "f", "vabbit.toml", "config file")
 	fs.StringVar(&c.network, "n", "", "only this network")
 	return c
 }
@@ -105,7 +105,7 @@ func (c *common) load() (config.File, []config.Network, *bunny.Client, error) {
 
 func cmdInit(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	file := fs.String("f", "edgeguard.toml", "file to write")
+	file := fs.String("f", "vabbit.toml", "file to write")
 	fs.Parse(args)
 	fh, err := os.OpenFile(*file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
@@ -115,7 +115,7 @@ func cmdInit(args []string) error {
 	if _, err := fh.WriteString(config.Example); err != nil {
 		return err
 	}
-	fmt.Printf("Wrote %s. Edit it, set BUNNY_API_KEY, then run: edgeguard-deploy plan\n", *file)
+	fmt.Printf("Wrote %s. Edit it, set BUNNY_API_KEY, then run: vabbit-deploy plan\n", *file)
 	return nil
 }
 
@@ -173,7 +173,7 @@ func cmdApply(ctx context.Context, args []string, dry bool) error {
 		}
 		if res.AdminToken != "" {
 			fmt.Printf("\n  New admin token for %s (shown once, keep it secret):\n    %s\n", n.Name, res.AdminToken)
-			fmt.Printf("  Log in with: edgeguard login --server %s\n\n", res.URL)
+			fmt.Printf("  Log in with: vabbit login --server %s\n\n", res.URL)
 			if *tokenFile != "" {
 				if err := appendSecret(*tokenFile, fmt.Sprintf("%s %s %s\n", n.Name, res.URL, res.AdminToken)); err != nil {
 					return err
@@ -225,8 +225,8 @@ func cmdRotate(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("New admin token for %s (shown once, keep it secret):\n  %s\n", nets[0].Name, tok)
 	fmt.Println("The old token stops working once Bunny has published the change.")
-	fmt.Println("Run `edgeguard login` again with the new token. Devices are not affected;")
-	fmt.Println("check `edgeguard keys ls` and `edgeguard devices ls` if the old token may have leaked.")
+	fmt.Println("Run `vabbit login` again with the new token. Devices are not affected;")
+	fmt.Println("check `vabbit keys ls` and `vabbit devices ls` if the old token may have leaked.")
 	if *tokenFile != "" {
 		return appendSecret(*tokenFile, fmt.Sprintf("%s %s\n", nets[0].Name, tok))
 	}
@@ -284,7 +284,7 @@ func waitHealthy(ctx context.Context, url string) {
 			return
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
-			fmt.Printf("  not answering yet (%s); a new hostname can take a few minutes. Check with: edgeguard-deploy status\n", h)
+			fmt.Printf("  not answering yet (%s); a new hostname can take a few minutes. Check with: vabbit-deploy status\n", h)
 			return
 		}
 		time.Sleep(3 * time.Second)

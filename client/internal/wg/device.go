@@ -54,7 +54,7 @@ func Start(name, privateKey string, port int) (*Device, error) {
 		dev.Close()
 		return nil, err
 	}
-	d.uapi = serveUAPI(name, dev) // lets `wg show` and `edgeguard status` read it
+	d.uapi = serveUAPI(name, dev) // lets `wg show` and `vabbit status` read it
 	return d, nil
 }
 

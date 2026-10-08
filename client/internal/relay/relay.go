@@ -165,7 +165,7 @@ func selfSigned() (tls.Certificate, string, error) {
 	serial, _ := rand.Int(rand.Reader, big.NewInt(1<<62))
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: "edgeguard-relay"},
+		Subject:      pkix.Name{CommonName: "vabbit-relay"},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(10 * 365 * 24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,

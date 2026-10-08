@@ -6,7 +6,7 @@ import { MemoryStore } from "./store.ts";
 
 const adminTokenSha256 = process.env.ADMIN_TOKEN_SHA256;
 if (!adminTokenSha256) {
-  console.error("set ADMIN_TOKEN_SHA256 (see `edgeguard admin-token`)");
+  console.error("set ADMIN_TOKEN_SHA256 (see `vabbit admin-token`)");
   process.exit(1);
 }
 const port = Number(process.env.PORT ?? 8787);
@@ -21,4 +21,4 @@ const tls = process.env.TLS_CERT && process.env.TLS_KEY
   : undefined;
 const hostname = process.env.HOST ?? "127.0.0.1";
 Bun.serve({ port, hostname, fetch: handler, tls });
-console.log(`edgeguard dev server on ${tls ? "https" : "http"}://${hostname}:${port}`);
+console.log(`vabbit dev server on ${tls ? "https" : "http"}://${hostname}:${port}`);

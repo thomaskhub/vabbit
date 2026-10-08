@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"edgeguard/internal/api"
-	"edgeguard/internal/wg"
+	"vabbit/internal/api"
+	"vabbit/internal/wg"
 )
 
 // Network is the validated view of one sync response.

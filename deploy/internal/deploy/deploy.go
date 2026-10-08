@@ -1,4 +1,4 @@
-// Package deploy turns a network from edgeguard.toml into Bunny resources: a
+// Package deploy turns a network from vabbit.toml into Bunny resources: a
 // private storage zone and an edge script with its variables and secrets.
 // Every step is idempotent, so apply can run as often as you like.
 package deploy
@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"io"
 
-	"edgeguard-deploy/internal/bunny"
-	"edgeguard-deploy/internal/config"
+	"vabbit-deploy/internal/bunny"
+	"vabbit-deploy/internal/config"
 )
 
 // Variables that hold non-secret fingerprints of secrets, so apply can tell
@@ -187,7 +187,7 @@ func Apply(ctx context.Context, c *bunny.Client, n config.Network, code string, 
 	if res.Changed {
 		o.step("publish")
 		if !o.DryRun {
-			if err := c.Publish(ctx, script.ID, "edgeguard-deploy"); err != nil {
+			if err := c.Publish(ctx, script.ID, "vabbit-deploy"); err != nil {
 				return res, fmt.Errorf("publish: %w", err)
 			}
 		}
@@ -220,7 +220,7 @@ func RotateAdmin(ctx context.Context, c *bunny.Client, n config.Network) (string
 	if err := c.UpsertVariable(ctx, script.ID, varAdminTokenID, adminTokenID(hash)); err != nil {
 		return "", err
 	}
-	if err := c.Publish(ctx, script.ID, "edgeguard-deploy: rotate admin token"); err != nil {
+	if err := c.Publish(ctx, script.ID, "vabbit-deploy: rotate admin token"); err != nil {
 		return "", err
 	}
 	return tok, nil
@@ -248,14 +248,14 @@ func Destroy(ctx context.Context, c *bunny.Client, n config.Network, out io.Writ
 	return nil
 }
 
-// NewAdminToken returns a token in the same format as `edgeguard admin-token`
+// NewAdminToken returns a token in the same format as `vabbit admin-token`
 // and its SHA-256.
 func NewAdminToken() (token, sha string, err error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", "", err
 	}
-	token = "ega_" + base64.RawURLEncoding.EncodeToString(b)
+	token = "vba_" + base64.RawURLEncoding.EncodeToString(b)
 	sum := sha256.Sum256([]byte(token))
 	return token, hex.EncodeToString(sum[:]), nil
 }

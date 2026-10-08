@@ -6,7 +6,7 @@ import (
 	"log"
 	"net"
 
-	"edgeguard/internal/stun"
+	"vabbit/internal/stun"
 )
 
 func main() {

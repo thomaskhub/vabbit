@@ -1,4 +1,4 @@
-// Package edgescript carries the built edge script inside edgeguard-deploy,
+// Package edgescript carries the built edge script inside vabbit-deploy,
 // so deploying needs no Bun or Node. `make deploy` copies edge/dist into
 // bundle/ before building; without it, pass --script or set script in the config.
 package edgescript

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"edgeguard/internal/wg"
+	"vabbit/internal/wg"
 )
 
 // Path is how traffic to a peer currently flows.

@@ -1,5 +1,5 @@
 // Package bunny is a small client for the parts of the bunny.net API that
-// EdgeGuard needs: storage zones and edge scripts.
+// Vabbit needs: storage zones and edge scripts.
 package bunny
 
 import (
