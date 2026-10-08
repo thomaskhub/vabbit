@@ -144,13 +144,28 @@ vabbit devices rm <id>                 # cut off on its next sync (≤15s)
 
 ## Users: connect a device
 
-Get a setup key from the admin, then on the device (Linux, as root):
+Get a setup key from the admin, then on the device (Linux, amd64 or arm64) install,
+join and start the service in one line:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/thomaskhub/vabbit/main/scripts/install.sh |
+  sudo VABBIT_SERVER=https://mynet.b-cdn.net VABBIT_SETUP_KEY=vbk_... sh
+sudo vabbit status
+```
+
+The script downloads the latest release, checks it against the release's `SHA256SUMS`,
+installs `/usr/local/bin/vabbit` and the systemd unit, enrolls and runs `vabbit@vb0`.
+Without `VABBIT_SETUP_KEY` it only installs. Other settings: `VABBIT_VERSION` (a tag),
+`VABBIT_NAME`, `VABBIT_ENDPOINT` (public `HOST:PORT`, e.g. for a hub), `VABBIT_IFACE`.
+While the repository is private, pass a GitHub token for both the script and the release:
+`curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" … | sudo GITHUB_TOKEN=$GITHUB_TOKEN VABBIT_SERVER=… sh`.
+
+By hand, from a release binary or `make client`:
 
 ```sh
 sudo VABBIT_SETUP_KEY=vbk_... vabbit up --server https://mynet.b-cdn.net --dry-run   # enroll
 sudo cp packaging/vabbit@.service /etc/systemd/system/
 sudo systemctl enable --now vabbit@vb0                                               # keep it running
-sudo vabbit status
 ```
 
 `vabbit up` without `--dry-run` enrolls and runs the tunnel in the foreground instead.
@@ -262,6 +277,10 @@ cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :878
 echo vba_... | vabbit login --server http://127.0.0.1:8787   # token from vabbit admin-token
 sudo vabbit up --dry-run                 # syncs once and prints the peers instead of starting
 ```
+
+To publish a release, push a tag such as `v0.1.0`: [release.yml](.github/workflows/release.yml)
+builds the client (Linux amd64/arm64), `vabbit-deploy` (Linux and macOS), the systemd
+unit, `install.sh` and `SHA256SUMS`, and attaches them to a GitHub release.
 
 ## Dependencies
 

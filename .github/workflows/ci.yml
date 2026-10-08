@@ -36,6 +36,7 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test ./...
+      - run: shellcheck ../scripts/install.sh
       - name: Build Linux binaries
         run: |
           for arch in amd64 arm64; do

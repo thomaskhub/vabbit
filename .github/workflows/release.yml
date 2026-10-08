@@ -1,0 +1,43 @@
+name: release
+# Push a tag like v0.1.0 to publish binaries, the systemd unit, the installer and
+# checksums as a GitHub release (used by scripts/install.sh).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+      - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -eu
+          mkdir -p out
+          (cd edge && bun install --frozen-lockfile && bun run build)
+          cp edge/dist/edge-script.js deploy/edgescript/bundle/
+          for arch in amd64 arm64; do
+            (cd client && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+              -ldflags="-s -w -X main.version=$VERSION" -o ../out/vabbit-linux-$arch ./cmd/vabbit)
+          done
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            (cd deploy && CGO_ENABLED=0 GOOS=${target%/*} GOARCH=${target#*/} go build -trimpath \
+              -ldflags="-s -w" -o ../out/vabbit-deploy-${target%/*}-${target#*/} ./cmd/vabbit-deploy)
+          done
+          cp packaging/vabbit@.service scripts/install.sh out/
+          (cd out && sha256sum * > SHA256SUMS)
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --generate-notes
