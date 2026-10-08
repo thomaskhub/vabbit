@@ -37,8 +37,13 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
 
 - [ ] **macOS and Windows clients.** WireGuard (wireguard-go) is portable; address, route and
       interface setup in `client/internal/wg` is Linux-only, and so is the systemd unit.
-- [ ] IPv6 endpoint candidates.
-- [ ] DNS names for devices inside the VPN.
+- [ ] IPv6 VPN addresses (IPv6 endpoint candidates are done, PR #2).
+- [ ] A DNS server for device names. Today names are written to `/etc/hosts` as `<name>.vabbit`
+      (PR #4); existing installs need the new `vabbit@.service` for that.
+- [ ] `vabbit-deploy` support for the Cloudflare Worker + R2 option (PR #5 documents a manual
+      deploy only); it has not run on a real Cloudflare account yet either.
+- [ ] Concurrent enrollments can still, very rarely, pick the same address (no compare-and-swap
+      in storage); a safe fix needs the client to accept an address change on sync.
 
 ## Polish
 
