@@ -111,14 +111,15 @@ func Replace(content, iface, block string) (string, error) {
 // reads the file on every call and writes nothing when the content is already right, so it can run
 // after every sync and puts back a block that someone else removed.
 //
-// Writers are serialized with flock on the file itself, so agents for different interfaces don't lose
+// Writers are serialized with a lock on the file itself (flock; LockFileEx on Windows), so agents for different interfaces don't lose
 // each other's block. The lock is taken on the file that is at path once the lock is held: a writer
 // that renamed a new file over it in the meantime is waited for.
 //
 // The new content goes to a temporary file in the same directory that is synced and renamed over path,
 // with the old mode and owner, so a crash leaves either the old or the new file. When that is not
 // possible (a bind-mounted /etc/hosts in a container gives EBUSY, the service sandbox makes /etc
-// read-only and only opens the file itself), the file is rewritten in place; see writeInPlace.
+// read-only and only opens the file itself), the file is rewritten in place; see writeInPlace. On
+// Windows it always is.
 func Apply(path, iface string, entries []Entry) (bool, error) {
 	block := Block(iface, entries)
 	f, err := lockFile(path, block != "")
@@ -140,6 +141,9 @@ func Apply(path, iface string, entries []Entry) (bool, error) {
 	fi, err := f.Stat()
 	if err != nil {
 		return false, err
+	}
+	if runtime.GOOS == "windows" { // a file that is open (by us, to hold the lock) can't be renamed over
+		return true, writeInPlace(path, []byte(next))
 	}
 	err = replaceFile(path, fi, []byte(next))
 	if err == nil {

@@ -125,6 +125,9 @@ func TestApplyInPlaceWhenRenameFails(t *testing.T) {
 }
 
 func TestApplyReplacesTheFileAndKeepsItsMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows rewrites the hosts file in place")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hosts")
 	if err := os.WriteFile(path, []byte("127.0.0.1 localhost\n"), 0o640); err != nil {
