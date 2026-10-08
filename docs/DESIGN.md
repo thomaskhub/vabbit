@@ -156,7 +156,21 @@ Notes:
   so a hostile server can at most make the device send WireGuard handshakes
   to an address of its choosing.
 
+## Names
+
+The agent writes `<address> <name>.<domain>` for every device (and itself) into a managed block of
+`/etc/hosts` after each good sync (nothing is written when the block is already right, and a block
+someone else removed comes back), and removes the block when it stops. Writers take an flock on the
+file, so agents for several interfaces don't lose each other's block. The new file is written next to
+it, synced and renamed over it; where that fails (`/etc/hosts` is a bind mount in containers, and the
+service sandbox, `ProtectSystem=strict`, opens only that one path) it is rewritten in place. The
+device's own name is the one the server sends, so an admin rename shows up. Only qualified names are
+written, so a device cannot shadow a local name by choosing it; invalid names are skipped, and domains
+that already mean something (`com`, `local`, `lan`, ...) are refused. An unterminated block makes the
+write fail (logged once) instead of guessing which lines are ours.
+
 ## Not in v1
 
 macOS and Windows clients (the WireGuard part is already portable; address
-and route setup is Linux-only), IPv6 candidates, ACLs between devices, DNS.
+and route setup is Linux-only), IPv6 candidates, ACLs between devices, a DNS server (names are
+written to `/etc/hosts` instead).

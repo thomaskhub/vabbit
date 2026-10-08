@@ -21,6 +21,8 @@ type Device struct {
 	NetworkCIDR string `json:"networkCidr"`
 	ListenPort  int    `json:"listenPort"`
 	Endpoint    string `json:"endpoint,omitempty"`
+	// Domain is the DNS domain of the device names written to the hosts file: empty = "vabbit", "none" = off.
+	Domain string `json:"domain,omitempty"`
 }
 
 const DefaultDir = "/var/lib/vabbit"
