@@ -253,12 +253,12 @@ func TestQueryMappedParallelAndOrdered(t *testing.T) {
 		// The first server answers last, and IPv6 on the second server is blackholed.
 		delay := 10 * time.Millisecond
 		if s.Addr() == netip.MustParseAddr("192.0.2.1") {
-			delay = 250 * time.Millisecond
+			delay = 400 * time.Millisecond
 		}
 		if s.Addr() == netip.MustParseAddr("2001:db8::2") {
 			delay = time.Hour
 		}
-		ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+		ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		defer cancel()
 		select {
 		case <-time.After(delay):
@@ -269,7 +269,7 @@ func TestQueryMappedParallelAndOrdered(t *testing.T) {
 	}
 	start := time.Now()
 	got := queryMapped(context.Background(), []string{"a.example:3478", "missing.example:3478", "b.example:3478"}, true, true, dns, query)
-	if d := time.Since(start); d > 450*time.Millisecond {
+	if d := time.Since(start); d > 800*time.Millisecond { // one after another would take over 900 ms
 		t.Errorf("queries took %v; they must run at once", d)
 	}
 	want := aps("198.51.100.1:1000", "[2001:db8:f::1]:1000", "198.51.100.1:2000")
