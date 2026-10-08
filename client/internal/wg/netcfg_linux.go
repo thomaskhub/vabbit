@@ -52,6 +52,15 @@ func (d *Device) SetForwarding(on bool) error {
 	return os.WriteFile("/proc/sys/net/ipv4/conf/"+d.Name+"/forwarding", []byte(v), 0o644)
 }
 
+// Forwarding reports whether IPv4 forwarding is on for the tunnel interface.
+func (d *Device) Forwarding() (bool, error) {
+	b, err := os.ReadFile("/proc/sys/net/ipv4/conf/" + d.Name + "/forwarding")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(string(b)) != "0", nil
+}
+
 // serveUAPI exposes the standard WireGuard control socket (root only) so
 // `wg show` and `vabbit status` work. Failure is not fatal.
 func serveUAPI(name string, dev *device.Device) func() {

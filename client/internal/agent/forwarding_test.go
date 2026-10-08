@@ -8,9 +8,13 @@ import (
 )
 
 type fakeForwarding struct {
-	err   error
-	calls []bool
+	err     error
+	on      bool  // what Forwarding reports
+	readErr error // what Forwarding fails with
+	calls   []bool
 }
+
+func (f *fakeForwarding) Forwarding() (bool, error) { return f.on, f.readErr }
 
 func (f *fakeForwarding) SetForwarding(on bool) error {
 	f.calls = append(f.calls, on)
@@ -23,17 +27,21 @@ func TestApplyForwarding(t *testing.T) {
 		name     string
 		hub      bool
 		setErr   error
+		on       bool
+		readErr  error
 		wantErr  bool
 		wantLogs int
 	}{
-		{"hub, ok", true, nil, false, 0},
-		{"non-hub, ok", false, nil, false, 0},
-		{"non-hub, read-only /proc/sys: warn and go on", false, roFS, false, 1},
-		{"hub, read-only /proc/sys: fatal", true, roFS, true, 0},
+		{"hub, ok", true, nil, false, nil, false, 0},
+		{"non-hub, ok", false, nil, false, nil, false, 0},
+		{"non-hub, read-only /proc/sys, already off: warn and go on", false, roFS, false, nil, false, 1},
+		{"non-hub, read-only /proc/sys, on: fatal", false, roFS, true, nil, true, 0},
+		{"non-hub, read-only /proc/sys, unreadable: fatal", false, roFS, false, errors.New("no such file"), true, 0},
+		{"hub, read-only /proc/sys: fatal", true, roFS, false, nil, true, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			f := &fakeForwarding{err: tc.setErr}
+			f := &fakeForwarding{err: tc.setErr, on: tc.on, readErr: tc.readErr}
 			var logs []string
 			logf := func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
 			err := applyForwarding(f, tc.hub, logf)
