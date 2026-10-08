@@ -88,6 +88,104 @@ sudo vabbit status
 sudo vabbit leave              # a device removes itself
 ```
 
+## Command reference
+
+### `vabbit` (devices and admin)
+
+Admin commands use the login stored in `~/.config/vabbit/admin.json`. Device commands
+(`up`, `down`, `leave`, `status`) need root and keep their state in `/var/lib/vabbit`.
+
+| Command | What it does |
+|---|---|
+| `vabbit login` | Log in as admin to a network. |
+| `vabbit logout` | Forget the admin login. |
+| `vabbit admin-token` | Print a new admin token and its SHA-256 (for manual setups without `vabbit-deploy`). |
+| `vabbit keys create` | Create a setup key for enrolling a device. |
+| `vabbit keys ls` | List setup keys. |
+| `vabbit keys rm ID` | Delete a setup key. |
+| `vabbit devices ls` | List devices. |
+| `vabbit devices rm ID` | Remove a device; it is cut off on its next sync. |
+| `vabbit devices set ID` | Rename a device, make it a hub, or set when its access expires. |
+| `vabbit up` | Enroll this machine (first run) and run the tunnel. |
+| `vabbit down` | Stop the tunnel; the device stays enrolled. |
+| `vabbit leave` | Remove this device from the network and delete its local state. |
+| `vabbit status` | Show this device, its peers and how each is reached. |
+| `vabbit version` | Print the version. |
+
+**`vabbit login`**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--server URL` | | Control plane URL, e.g. `https://mynet.b-cdn.net`. |
+| `--token TOKEN` | prompted | Admin token (`vba_…`). Leave it out to be prompted, so it stays out of shell history. |
+
+**`vabbit keys create`**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--reusable` | off | Let the key enroll more than one device. |
+| `--max-uses N` | `0` (unlimited) | Limit how often a reusable key can be used. |
+| `--ttl DURATION` | `24h` | How long the key can be used, e.g. `2h`, `7d` or `never`. |
+| `--device-ttl DURATION` | `never` | Devices enrolled with this key lose access this long after joining, e.g. `7d`. |
+
+**`vabbit devices set ID`**
+
+| Flag | Meaning |
+|---|---|
+| `--name NAME` | Rename the device. |
+| `--hub=true\|false` | Make the device a hub, or stop it being one. A hub needs a public endpoint. |
+| `--expires DURATION` | Remove the device's access this long from now (e.g. `7d`), or `never`. |
+
+**`vabbit up`**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--server URL` | | Control plane URL. Only needed on the first run. |
+| `--setup-key KEY` | `$VABBIT_SETUP_KEY` | One-time setup key for the first run. The environment variable keeps it out of the process list. Not needed when logged in as admin. |
+| `--name NAME` | hostname | Device name. |
+| `--endpoint HOST:PORT` | | Public address other devices can reach this one on. Required for a hub. |
+| `--hub` | off | Make this device the hub. Needs `--endpoint` and an admin login. |
+| `--port N` | `51820` | WireGuard UDP listen port. |
+| `--interval DURATION` | `15s` | How often to sync with the control plane. |
+| `--stun LIST` | Cloudflare and Google | Comma-separated STUN servers (`host:port`), or `none`. |
+| `--tcp-relay ADDR` | `:443` | Hubs only: where to serve the TLS relay for UDP-blocked networks, or `off`. |
+| `--dry-run` | off | Enroll and sync once, print the peers, and don't start the interface. |
+| `--iface NAME` | `vb0` | WireGuard interface. Use a different one per network. |
+| `--state-dir DIR` | `/var/lib/vabbit` | Where enrollment state is kept. |
+
+`--endpoint` and `--port` given on a later run update the stored settings.
+
+**`vabbit down`, `vabbit leave`, `vabbit status`**
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--iface NAME` | `vb0` | Which interface (network) to act on. |
+| `--state-dir DIR` | `/var/lib/vabbit` | Where enrollment state is kept. |
+
+### `vabbit-deploy` (bunny.net)
+
+The Bunny API key is read from the environment variable named by `api_key_env` in the
+config (default `BUNNY_API_KEY`). See [docs/DEPLOY.md](docs/DEPLOY.md).
+
+| Command | What it does |
+|---|---|
+| `vabbit-deploy init` | Write an example config file. |
+| `vabbit-deploy plan` | Show what `apply` would change, without changing anything. |
+| `vabbit-deploy apply` | Create or update every network on Bunny. Safe to run repeatedly. |
+| `vabbit-deploy status` | Show each network's URL and whether it answers. |
+| `vabbit-deploy rotate-admin -n NAME` | Replace a network's admin token and print the new one. |
+| `vabbit-deploy destroy -n NAME` | Delete a network's edge script and storage zone. Asks you to type the name. |
+
+| Flag | Commands | Default | Meaning |
+|---|---|---|---|
+| `-f FILE` | all | `vabbit.toml` | Config file (for `init`: the file to write). |
+| `-n NAME` | plan, apply, status, rotate-admin, destroy | all networks | Only this network. Required for `rotate-admin` and `destroy`. |
+| `--script FILE` | plan, apply | built in | Deploy this built edge script instead of the bundled one. |
+| `--allow-cidr-change` | plan, apply | off | Allow changing a network's CIDR. Every enrolled device must re-enroll. |
+| `--admin-token-file FILE` | apply, rotate-admin | | Also append newly generated admin tokens to this file (mode 0600). |
+| `--no-wait` | apply | off | Don't wait for the network to answer after publishing. |
+| `--yes` | destroy | off | Don't ask for confirmation. |
+
 ## Connectivity
 
 Devices behind NAT find their public address with STUN on the WireGuard port, share it
