@@ -122,7 +122,7 @@ func Run(ctx context.Context, o Options) error {
 					if err := dev.SetAddress(n.Address); err != nil {
 						return err
 					}
-					if err := dev.SetForwarding(n.SelfHub); err != nil {
+					if err := applyForwarding(dev, n.SelfHub, o.Logf); err != nil {
 						return err
 					}
 					o.Logf("interface %s up with %s (hub: %v)", dev.Name, n.Address, n.SelfHub)
