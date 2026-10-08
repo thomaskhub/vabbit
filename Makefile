@@ -1,10 +1,12 @@
-.PHONY: test build edge client deploy sbom
+.PHONY: test build edge worker client deploy sbom
 test:
 	cd edge && bun test
 	cd client && go vet ./... && go test ./...
 	cd deploy && go vet ./... && go test ./...
 edge:
 	cd edge && bun run build
+worker:
+	cd edge && bun run build:worker
 client:
 	cd client && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o ../dist/vabbit ./cmd/vabbit
 deploy: edge

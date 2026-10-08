@@ -42,5 +42,10 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
 
 ## Polish
 
+- [ ] **Flaky e2e in CI.** `scripts/e2e-nat.sh` failed twice on 2026-10-08 (commits 93be3bd and
+      b64d802, no related code change) and then passed 5 times in a row; it always passes
+      locally. Failures now show up as annotations with the end of each agent log, readable via
+      `gh api repos/thomaskhub/vabbit/check-runs/<job id>/annotations`. Look there on the next failure.
+
 - [ ] Convert the text in `docs/brand/vabbit-logo.svg` and `vabbit-banner.svg` to outlines so
       it renders the same without the font installed.
