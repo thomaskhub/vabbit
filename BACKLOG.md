@@ -12,7 +12,7 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
 - [ ] **Make the repo public.** The history was scanned and holds no secrets. The agent proxy
       cannot change repo settings, so the owner does it in GitHub: Settings → General →
       Danger Zone → Change visibility. Until then `install.sh` needs `GITHUB_TOKEN`.
-- [ ] **First release `v0.1.0`.** The pre-release `v0.1.0-rc.1` was published on 2026-10-08
+- [ ] **First release `v0.1.0`.** Pre-releases `v0.1.0-rc.1` and `rc.2` (with PRs 1-5) were published on 2026-10-08
       and its installer and enrollment against the local dev server worked. Tag `v0.1.0` after
       the real Bunny test (push the tag, or run the release workflow by hand with `tag=v0.1.0`;
       agent sessions can't push tags, so they use the hand run via the Actions API).
