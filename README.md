@@ -185,6 +185,14 @@ Devices need `iproute2` and `/dev/net/tun`; WireGuard itself is built in. Outbou
 STUN servers (default Cloudflare and Google) is used to discover the public address.
 To join a second network, use another interface: `--iface vb1` and `vabbit@vb1`.
 
+**Names.** While the agent runs, every device in the network can be reached by name:
+`db.vabbit` is the device called `db` (the domain comes from `--domain`). The agent keeps a block between
+`# BEGIN vabbit vb0` and `# END vabbit vb0` in `/etc/hosts` up to date after every sync and removes it when it
+stops; the rest of the file is never touched. Only the qualified name is written, never the short name `db`: a
+device chooses its own name, and a short name could shadow names on your machine. Names that are not valid
+host names (letters, digits and hyphens) are skipped and logged. The packaged service may write only
+`/etc/hosts` (not the rest of `/etc`); if you run an older unit file, update it from the release.
+
 | Command | What it does |
 |---|---|
 | `vabbit up` | Enroll this machine (first run) and run the tunnel. |
@@ -206,6 +214,7 @@ To join a second network, use another interface: `--iface vb1` and `vabbit@vb1`.
 | `--interval DURATION` | `15s` | How often to sync with the control plane. |
 | `--stun LIST` | Cloudflare and Google | Comma-separated STUN servers (`host:port`), or `none`. |
 | `--tcp-relay ADDR` | `:443` | Hubs only: where to serve the TLS relay for UDP-blocked networks, or `off`. |
+| `--domain NAME` | `vabbit` | Domain of the device names in `/etc/hosts` (see below), or `none` to turn them off. Remembered. |
 | `--dry-run` | off | Enroll and sync once, print the peers, and don't start the interface. |
 | `--iface NAME` | `vb0` | WireGuard interface. Use a different one per network. |
 | `--state-dir DIR` | `/var/lib/vabbit` | Where enrollment state is kept. |

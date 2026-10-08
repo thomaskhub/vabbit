@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"vabbit/internal/api"
+	"vabbit/internal/hosts"
 	"vabbit/internal/relay"
 	"vabbit/internal/state"
 	"vabbit/internal/wg"
@@ -32,7 +33,11 @@ type Options struct {
 	// TCPRelay is the address a hub serves its TLS relay on (e.g. ":443"),
 	// for devices on networks that block UDP. Empty disables it.
 	TCPRelay string
-	Logf     func(format string, args ...any)
+	// Domain is the domain of the names written to the hosts file ("" = off, see EffectiveDomain).
+	Domain string
+	// HostsFile is the file that gets the names; empty = /etc/hosts.
+	HostsFile string
+	Logf      func(format string, args ...any)
 }
 
 const tick = 2 * time.Second
@@ -70,7 +75,26 @@ func Run(ctx context.Context, o Options) error {
 		lastHubKey string
 		relaySrv   *relay.Server
 		relayInfo  *api.Relay
+		lastHosts  []hosts.Entry
+		hostsFile  = o.HostsFile
 	)
+	if hostsFile == "" {
+		hostsFile = hosts.DefaultFile
+	}
+	// The names of the other devices are written to the hosts file after every good sync and the block
+	// is taken out again when the agent stops.
+	if o.Domain == "" { // the feature is off: take out a block that an earlier run left
+		if _, err := hosts.Apply(hostsFile, o.Iface, nil); err != nil {
+			o.Logf("could not clean the device names out of %s: %v", hostsFile, err)
+		}
+	}
+	defer func() {
+		if lastHosts != nil {
+			if _, err := hosts.Apply(hostsFile, o.Iface, nil); err != nil {
+				o.Logf("could not remove the device names from %s: %v", hostsFile, err)
+			}
+		}
+	}()
 	defer func() {
 		if relaySrv != nil {
 			relaySrv.Close()
@@ -117,6 +141,16 @@ func Run(ctx context.Context, o Options) error {
 				resolved = resolve(ctx, n.Peers)
 				for _, p := range n.Peers {
 					peerByName[p.PublicKey] = p.Name
+				}
+				if entries, skipped := hostEntries(o.Device.Name, n.Address.Addr(), n.Peers, o.Domain); !slices.Equal(entries, lastHosts) {
+					if _, err := hosts.Apply(hostsFile, o.Iface, entries); err != nil {
+						o.Logf("could not write the device names to %s: %v", hostsFile, err)
+					} else {
+						lastHosts = entries
+						if skipped > 0 {
+							o.Logf("%d device name(s) skipped: not valid host names or used twice", skipped)
+						}
+					}
 				}
 				if n.Address != lastAddr || n.SelfHub != lastHub {
 					if err := dev.SetAddress(n.Address); err != nil {

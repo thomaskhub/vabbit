@@ -45,7 +45,7 @@ Admin:
 
 Device (Linux, run as root):
   vabbit up [--server URL] [--setup-key KEY] [--name NAME] [--endpoint HOST:PORT] [--hub]
-               [--port 51820] [--iface vb0] [--interval 15s] [--stun host:port,...] [--dry-run]
+               [--port 51820] [--iface vb0] [--interval 15s] [--stun host:port,...] [--domain vabbit|none] [--dry-run]
   vabbit down [--iface vb0]
   vabbit leave [--iface vb0]               remove this device from the network
   vabbit status [--iface vb0]
@@ -410,6 +410,7 @@ func cmdUp(ctx context.Context, args []string) error {
 	interval := fs.Duration("interval", 15*time.Second, "how often to sync with the control plane")
 	stunFlag := fs.String("stun", "", "comma-separated STUN servers host:port, or \"none\" (default Cloudflare and Google)")
 	tcpRelay := fs.String("tcp-relay", ":443", "hubs only: where to serve the TLS relay for devices on UDP-blocked networks (\"off\" to disable)")
+	domain := fs.String("domain", "", "domain of the device names in /etc/hosts, e.g. db.vabbit (default vabbit; \"none\" turns it off)")
 	dryRun := fs.Bool("dry-run", false, "enroll/sync once and print the peers instead of starting the interface")
 	fs.Parse(args)
 
@@ -424,6 +425,9 @@ func cmdUp(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	if _, err := agent.EffectiveDomain(*domain); err != nil {
+		return fmt.Errorf("--domain: %w", err)
+	}
 	path, err := df.path()
 	if err != nil {
 		return err
@@ -437,6 +441,7 @@ func cmdUp(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		dev.Domain = *domain
 		if err := state.Save(path, dev); err != nil {
 			return fmt.Errorf("enrolled as %s but could not save state: %w", dev.DeviceID, err)
 		}
@@ -457,6 +462,8 @@ func cmdUp(ctx context.Context, args []string) error {
 				dev.Endpoint, changed = *endpoint, true
 			case "port":
 				dev.ListenPort, changed = *port, true
+			case "domain":
+				dev.Domain, changed = *domain, true
 			}
 		})
 		if changed {
@@ -487,7 +494,12 @@ func cmdUp(ctx context.Context, args []string) error {
 	if *stunFlag == "none" {
 		stunServers = nil
 	}
+	hostsDomain, err := agent.EffectiveDomain(dev.Domain)
+	if err != nil {
+		return fmt.Errorf("stored domain: %w", err)
+	}
 	err = agent.Run(ctx, agent.Options{
+		Domain:       hostsDomain,
 		Iface:        *df.iface,
 		Device:       dev,
 		Client:       c,
