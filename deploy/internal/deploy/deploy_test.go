@@ -267,13 +267,13 @@ func TestPinnedHashAndRotation(t *testing.T) {
 	if s.secrets["ADMIN_TOKEN_SHA256"] != sha("vba_two") {
 		t.Fatal("pinned hash not updated")
 	}
-	if _, err := RotateAdmin(ctx, c, n); err == nil {
+	if _, _, err := RotateAdmin(ctx, c, n); err == nil {
 		t.Fatal("rotate-admin must refuse a pinned hash")
 	}
 
 	n.AdminTokenSHA256 = ""
-	tok, err := RotateAdmin(ctx, c, n)
-	if err != nil || s.secrets["ADMIN_TOKEN_SHA256"] != sha(tok) || s.live != "code" {
+	tok, url, err := RotateAdmin(ctx, c, n)
+	if err != nil || url != "https://vabbit-home.b-cdn.net" || s.secrets["ADMIN_TOKEN_SHA256"] != sha(tok) || s.live != "code" {
 		t.Fatalf("rotate: %v", err)
 	}
 	// A later apply keeps the rotated token.

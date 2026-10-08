@@ -76,7 +76,8 @@ $ vabbit-deploy destroy -n home        # asks you to type the name first
 
 Every command exits non-zero on failure, so it fits in shell scripts and pipelines.
 Admin tokens are printed once; to capture them, pass `--admin-token-file FILE`
-(created with mode 0600). `--no-wait` skips the health check after publishing.
+(created with mode 0600) and log in from it with
+`vabbit login --token-file FILE --server URL`. `--no-wait` skips the health check after publishing.
 
 ## Safety
 

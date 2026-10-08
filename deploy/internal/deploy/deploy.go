@@ -200,30 +200,33 @@ func Apply(ctx context.Context, c *bunny.Client, n config.Network, code string, 
 	return res, nil
 }
 
-// RotateAdmin replaces the network's admin token and returns the new one.
-// The old token stops working once the new release is live.
-func RotateAdmin(ctx context.Context, c *bunny.Client, n config.Network) (string, error) {
+// RotateAdmin replaces the network's admin token and returns the new one and
+// the network's URL. The old token stops working once the new release is live.
+func RotateAdmin(ctx context.Context, c *bunny.Client, n config.Network) (token, url string, err error) {
 	if n.AdminTokenSHA256 != "" {
-		return "", fmt.Errorf("network %s pins admin_token_sha256 in the config; change it there and run apply", n.Name)
+		return "", "", fmt.Errorf("network %s pins admin_token_sha256 in the config; change it there and run apply", n.Name)
 	}
 	script, err := c.FindScript(ctx, n.ScriptName)
 	if err != nil {
-		return "", fmt.Errorf("edge script %s: %w (run apply first)", n.ScriptName, err)
+		return "", "", fmt.Errorf("edge script %s: %w (run apply first)", n.ScriptName, err)
 	}
 	tok, hash, err := NewAdminToken()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := c.UpsertSecret(ctx, script.ID, "ADMIN_TOKEN_SHA256", hash); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := c.UpsertVariable(ctx, script.ID, varAdminTokenID, adminTokenID(hash)); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := c.Publish(ctx, script.ID, "vabbit-deploy: rotate admin token"); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return tok, nil
+	if h := script.Hostname(); h != "" {
+		url = "https://" + h
+	}
+	return tok, url, nil
 }
 
 // Destroy deletes the edge script (with its pull zone) and the storage zone.

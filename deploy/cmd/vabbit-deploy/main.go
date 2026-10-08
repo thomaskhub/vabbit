@@ -146,7 +146,7 @@ func cmdApply(ctx context.Context, args []string, dry bool) error {
 	c := commonFlags(fs)
 	fs.StringVar(&c.script, "script", "", "built edge script to deploy (default: the one built in)")
 	allowCIDR := fs.Bool("allow-cidr-change", false, "allow changing a network's CIDR (strands every enrolled device)")
-	tokenFile := fs.String("admin-token-file", "", "also write newly generated admin tokens to this file (mode 0600)")
+	tokenFile := fs.String("admin-token-file", "", "also append newly generated admin tokens to this file (mode 0600), for vabbit login --token-file")
 	noWait := fs.Bool("no-wait", false, "don't wait for the network to answer after publishing")
 	fs.Parse(args)
 	f, nets, client, err := c.load()
@@ -210,7 +210,7 @@ func cmdStatus(ctx context.Context, args []string) error {
 func cmdRotate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("rotate-admin", flag.ExitOnError)
 	c := commonFlags(fs)
-	tokenFile := fs.String("admin-token-file", "", "also write the new token to this file (mode 0600)")
+	tokenFile := fs.String("admin-token-file", "", "also append the new token to this file (mode 0600), for vabbit login --token-file")
 	fs.Parse(args)
 	if c.network == "" {
 		return errors.New("rotate-admin needs -n NETWORK")
@@ -219,7 +219,7 @@ func cmdRotate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	tok, err := deploy.RotateAdmin(ctx, client, nets[0])
+	tok, url, err := deploy.RotateAdmin(ctx, client, nets[0])
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func cmdRotate(ctx context.Context, args []string) error {
 	fmt.Println("Run `vabbit login` again with the new token. Devices are not affected;")
 	fmt.Println("check `vabbit keys ls` and `vabbit devices ls` if the old token may have leaked.")
 	if *tokenFile != "" {
-		return appendSecret(*tokenFile, fmt.Sprintf("%s %s\n", nets[0].Name, tok))
+		return appendSecret(*tokenFile, fmt.Sprintf("%s %s %s\n", nets[0].Name, url, tok))
 	}
 	return nil
 }

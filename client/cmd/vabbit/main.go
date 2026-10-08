@@ -11,6 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -33,7 +34,8 @@ const usage = `vabbit - tiny WireGuard networks managed from a Bunny Edge Script
 
 Admin:
   vabbit admin-token                       generate an admin token and its SHA-256 for the edge script
-  vabbit login --server URL [--token T]    save admin credentials (prompts for the token if omitted)
+  vabbit login --server URL [--token T | --token-file F]
+                                           save admin credentials (prompts for the token if omitted)
   vabbit logout
   vabbit keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
   vabbit keys ls
@@ -113,7 +115,17 @@ func cmdLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
 	server := fs.String("server", "", "control plane URL, e.g. https://mynet.b-cdn.net")
 	token := fs.String("token", "", "admin token (prompted if omitted)")
+	tokenFile := fs.String("token-file", "", "read the admin token from this file (mode 0600): just the token, or the file vabbit-deploy --admin-token-file writes")
 	fs.Parse(args)
+	if *tokenFile != "" {
+		if *token != "" {
+			return errors.New("use --token or --token-file, not both")
+		}
+		var err error
+		if *server, *token, err = readTokenFile(*tokenFile, *server); err != nil {
+			return err
+		}
+	}
 	if *server == "" {
 		return errors.New("--server is required")
 	}
@@ -146,6 +158,72 @@ func cmdLogin(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("Logged in to network %q (%s). Credentials saved to %s\n", n.Name, n.CIDR, path)
 	return nil
+}
+
+// readTokenFile reads an admin token from a file that holds either just the
+// token or "NETWORK URL TOKEN" lines as written by vabbit-deploy. With several
+// lines, the newest one for server wins; server may be empty when the file
+// names only one URL.
+func readTokenFile(path, server string) (string, string, error) {
+	fh, err := os.Open(path)
+	if err != nil {
+		return "", "", err
+	}
+	defer fh.Close()
+	if st, err := fh.Stat(); err != nil {
+		return "", "", err
+	} else if st.Mode().Perm()&0o077 != 0 {
+		return "", "", fmt.Errorf("%s is readable by other users; chmod 600 it first", path)
+	}
+	want := ""
+	if server != "" {
+		if want, err = api.ValidateServer(server); err != nil {
+			return "", "", err
+		}
+	}
+	tokens := map[string]string{} // URL -> newest token
+	var bare []string
+	sc := bufio.NewScanner(io.LimitReader(fh, 1<<20))
+	for sc.Scan() {
+		f := strings.Fields(sc.Text())
+		if len(f) == 0 || strings.HasPrefix(f[0], "#") {
+			continue
+		}
+		tok := f[len(f)-1]
+		if !strings.HasPrefix(tok, "vba_") {
+			continue
+		}
+		if len(f) == 1 {
+			bare = append(bare, tok)
+			continue
+		}
+		for _, w := range f[:len(f)-1] {
+			if u, err := api.ValidateServer(w); err == nil && strings.Contains(w, "://") {
+				tokens[u] = tok
+			}
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", "", err
+	}
+	switch {
+	case len(bare) == 1 && len(tokens) == 0:
+		return server, bare[0], nil
+	case len(bare) > 0:
+		return "", "", fmt.Errorf("%s: expected one token, or NETWORK URL TOKEN lines", path)
+	case want != "":
+		if tok, ok := tokens[want]; ok {
+			return server, tok, nil
+		}
+		return "", "", fmt.Errorf("%s has no token for %s", path, want)
+	case len(tokens) == 1:
+		for u, tok := range tokens {
+			return u, tok, nil
+		}
+	case len(tokens) > 1:
+		return "", "", fmt.Errorf("%s has tokens for several networks; pick one with --server", path)
+	}
+	return "", "", fmt.Errorf("%s: no vba_ admin token found", path)
 }
 
 func cmdLogout() error {

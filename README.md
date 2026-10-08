@@ -118,6 +118,7 @@ Admin commands use the login stored in `~/.config/vabbit/admin.json`. Device com
 |---|---|---|
 | `--server URL` | | Control plane URL, e.g. `https://mynet.b-cdn.net`. |
 | `--token TOKEN` | prompted | Admin token (`vba_…`). Leave it out to be prompted, so it stays out of shell history. |
+| `--token-file FILE` | | Read the admin token from a file (must be mode 0600). The file holds just the token, or the `NETWORK URL TOKEN` lines that `vabbit-deploy --admin-token-file` writes; then the newest token for `--server` is used, and `--server` can be left out if the file names one network. |
 
 **`vabbit keys create`**
 
@@ -182,7 +183,7 @@ config (default `BUNNY_API_KEY`). See [docs/DEPLOY.md](docs/DEPLOY.md).
 | `-n NAME` | plan, apply, status, rotate-admin, destroy | all networks | Only this network. Required for `rotate-admin` and `destroy`. |
 | `--script FILE` | plan, apply | built in | Deploy this built edge script instead of the bundled one. |
 | `--allow-cidr-change` | plan, apply | off | Allow changing a network's CIDR. Every enrolled device must re-enroll. |
-| `--admin-token-file FILE` | apply, rotate-admin | | Also append newly generated admin tokens to this file (mode 0600). |
+| `--admin-token-file FILE` | apply, rotate-admin | | Also append newly generated admin tokens to this file (mode 0600) as `NETWORK URL TOKEN` lines, ready for `vabbit login --token-file`. |
 | `--no-wait` | apply | off | Don't wait for the network to answer after publishing. |
 | `--yes` | destroy | off | Don't ask for confirmation. |
 
