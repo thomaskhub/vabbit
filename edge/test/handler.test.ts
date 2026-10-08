@@ -341,27 +341,6 @@ describe("replacing a device of the same name", () => {
     expect(new Set((await devices(call)).map((d) => d.ip)).size).toBe(3);
   });
 
-  test("a lost race moves the newcomer to a free address", async () => {
-    // A /30 has two host addresses; pick two keys whose probing starts at the same one.
-    const store = new MemoryStore();
-    const h = createHandler(store, { adminTokenSha256: await sha256Hex(ADMIN), networkCidr: "100.92.0.0/30", networkName: "tiny" });
-    const post = async (path: string, body: object, token?: string) => {
-      const res = await h(new Request(`https://net.example${path}`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: JSON.stringify(body) }));
-      return { status: res.status, body: (await res.json()) as any };
-    };
-    const keys: string[] = [];
-    for (let i = 1; keys.length < 2; i++) {
-      const pk = Buffer.alloc(32, i).toString("base64");
-      if (parseInt((await sha256Hex(pk)).slice(0, 8), 16) % 2 === 0) keys.push(pk);
-    }
-    const k = (await post("/api/v1/setup-keys", { reusable: true }, ADMIN)).body.key;
-    const rs = await Promise.all(keys.map((pk) => post("/api/v1/enroll", { setupKey: k, name: "vm", publicKey: pk })));
-    expect(rs.map((r) => r.status)).toEqual([201, 201]);
-    const stored = await Promise.all((await store.list("devices/")).map((n) => store.get<Device>(`devices/${n}`)));
-    expect(new Set(stored.map((d) => d!.ip)).size).toBe(2);
-    expect(stored.map((d) => d!.ip).sort()).toEqual(rs.map((r) => r.body.device.ip).sort());
-  });
-
   test("a rebuilt machine that kept its WireGuard key can replace itself", async () => {
     const { call } = await setup();
     const old = await join(call, await key(call), "db", KEY1);

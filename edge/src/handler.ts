@@ -314,20 +314,6 @@ class Api {
       expiresAt: setupKey.deviceTtlSeconds ? t + setupKey.deviceTtlSeconds * 1000 : null,
     };
     await this.store.put(`devices/${id}.json`, dev);
-    // Storage has no compare-and-swap, so a concurrent enrollment may have picked the same address. Look
-    // again: of the devices holding it, the oldest (then lowest id) keeps it and the others move.
-    for (let i = 0; i < 3; i++) {
-      const now = await this.allDevices();
-      const holders = now.filter((d) => d.ip === dev.ip);
-      if (holders.every((d) => d.id === id || d.createdAt > t || (d.createdAt === t && d.id > id))) break;
-      const fresh = allocate(this.cidr, new Set(now.map((d) => d.ip)), await sha256Hex(publicKey));
-      if (!fresh) {
-        await this.store.delete(`devices/${id}.json`);
-        throw new HttpError(507, "network is full");
-      }
-      dev.ip = fresh;
-      await this.store.put(`devices/${id}.json`, dev);
-    }
     return json(201, {
       device: publicDevice(dev),
       deviceToken: token,

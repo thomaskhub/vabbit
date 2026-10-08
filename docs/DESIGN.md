@@ -125,9 +125,8 @@ setup-keys/<sha256>.json {id, hash, reusable, maxUses, uses, expiresAt, replace,
 
 Notes:
 * Storage has no compare-and-swap. IP allocation probes from a hash of the
-  device public key, so concurrent enrollments almost never collide; after
-  storing a device, enrollment lists the devices again and moves the newer
-  one if two share an address. Duplicate public keys are refused, except
+  device public key, so concurrent enrollments almost never collide.
+  Duplicate public keys are refused, except
   on a device being replaced: a `replace` key removes the devices of the
   same name and reuses the newest one's address.
 * `lastSeen` writes are throttled to one per 5 minutes per device.
