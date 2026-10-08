@@ -1,0 +1,628 @@
+// Command edgeguard is the EdgeGuard admin CLI and device agent.
+package main
+
+import (
+	"bufio"
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"os/signal"
+	"regexp"
+	"strings"
+	"syscall"
+	"text/tabwriter"
+	"time"
+
+	"edgeguard/internal/api"
+	"edgeguard/internal/state"
+	"edgeguard/internal/wg"
+)
+
+var version = "dev"
+
+const usage = `edgeguard - tiny WireGuard networks managed from a Bunny Edge Script
+
+Admin:
+  edgeguard admin-token                       generate an admin token and its SHA-256 for the edge script
+  edgeguard login --server URL [--token T]    save admin credentials (prompts for the token if omitted)
+  edgeguard logout
+  edgeguard keys create [--reusable] [--max-uses N] [--ttl 24h]
+  edgeguard keys ls
+  edgeguard keys rm ID
+  edgeguard devices ls
+  edgeguard devices rm ID
+  edgeguard devices set ID [--name NAME] [--hub=true|false]
+
+Device (Linux, run as root):
+  edgeguard up [--server URL] [--setup-key KEY] [--name NAME] [--endpoint HOST:PORT] [--hub]
+               [--port 51820] [--iface eg0] [--interval 30s] [--once] [--dry-run]
+  edgeguard down [--iface eg0]
+  edgeguard leave [--iface eg0]               remove this device from the network
+  edgeguard status [--iface eg0]
+
+The setup key can also be passed in EDGEGUARD_SETUP_KEY to keep it out of the process list.
+`
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	var err error
+	args := os.Args[2:]
+	switch os.Args[1] {
+	case "admin-token":
+		err = cmdAdminToken()
+	case "login":
+		err = cmdLogin(ctx, args)
+	case "logout":
+		err = cmdLogout()
+	case "keys":
+		err = cmdKeys(ctx, args)
+	case "devices":
+		err = cmdDevices(ctx, args)
+	case "up":
+		err = cmdUp(ctx, args)
+	case "down":
+		err = cmdDown(args)
+	case "leave":
+		err = cmdLeave(ctx, args)
+	case "status":
+		err = cmdStatus(ctx, args)
+	case "version":
+		fmt.Println(version)
+	case "help", "-h", "--help":
+		fmt.Print(usage)
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", os.Args[1], usage)
+		os.Exit(2)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+}
+
+// ---- admin -------------------------------------------------------------------
+
+func cmdAdminToken() error {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return err
+	}
+	tok := "ega_" + base64.RawURLEncoding.EncodeToString(b)
+	sum := sha256.Sum256([]byte(tok))
+	fmt.Printf("Admin token (keep secret, give to `edgeguard login`):\n  %s\n\n", tok)
+	fmt.Printf("Set this as the edge script secret ADMIN_TOKEN_SHA256:\n  %s\n", hex.EncodeToString(sum[:]))
+	return nil
+}
+
+func cmdLogin(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	server := fs.String("server", "", "control plane URL, e.g. https://mynet.b-cdn.net")
+	token := fs.String("token", "", "admin token (prompted if omitted)")
+	fs.Parse(args)
+	if *server == "" {
+		return errors.New("--server is required")
+	}
+	if *token == "" {
+		fmt.Fprint(os.Stderr, "Admin token: ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && line == "" {
+			return err
+		}
+		*token = strings.TrimSpace(line)
+	}
+	base, err := api.ValidateServer(*server)
+	if err != nil {
+		return err
+	}
+	c, err := api.New(base, *token)
+	if err != nil {
+		return err
+	}
+	n, err := c.Network(ctx)
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	path, err := state.AdminPath()
+	if err != nil {
+		return err
+	}
+	if err := state.Save(path, state.Admin{Server: base, Token: *token}); err != nil {
+		return err
+	}
+	fmt.Printf("Logged in to network %q (%s). Credentials saved to %s\n", n.Name, n.CIDR, path)
+	return nil
+}
+
+func cmdLogout() error {
+	path, err := state.AdminPath()
+	if err != nil {
+		return err
+	}
+	return state.Remove(path)
+}
+
+func adminClient() (*api.Client, state.Admin, error) {
+	var a state.Admin
+	path, err := state.AdminPath()
+	if err != nil {
+		return nil, a, err
+	}
+	if err := state.Load(path, &a); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, a, errors.New("not logged in; run `edgeguard login --server URL`")
+		}
+		return nil, a, err
+	}
+	c, err := api.New(a.Server, a.Token)
+	return c, a, err
+}
+
+func cmdKeys(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: edgeguard keys create|ls|rm")
+	}
+	c, _, err := adminClient()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "create":
+		fs := flag.NewFlagSet("keys create", flag.ExitOnError)
+		reusable := fs.Bool("reusable", false, "allow the key to enroll more than one device")
+		maxUses := fs.Int("max-uses", 0, "limit uses of a reusable key (0 = unlimited)")
+		ttl := fs.Duration("ttl", 24*time.Hour, "how long the key is valid")
+		fs.Parse(args[1:])
+		k, err := c.CreateSetupKey(ctx, *reusable, *maxUses, *ttl)
+		if err != nil {
+			return err
+		}
+		fmt.Println(k.Key)
+		fmt.Fprintf(os.Stderr, "id %s, expires %s. On the device run:\n  sudo EDGEGUARD_SETUP_KEY=%s edgeguard up --server <URL>\n", k.ID, k.ExpiresAt, k.Key)
+	case "ls":
+		keys, err := c.ListSetupKeys(ctx)
+		if err != nil {
+			return err
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tREUSABLE\tUSES\tEXPIRES")
+		for _, k := range keys {
+			limit := "∞"
+			if k.MaxUses > 0 {
+				limit = fmt.Sprint(k.MaxUses)
+			}
+			fmt.Fprintf(w, "%s\t%v\t%d/%s\t%s\n", k.ID, k.Reusable, k.Uses, limit, k.ExpiresAt)
+		}
+		w.Flush()
+	case "rm":
+		if len(args) != 2 {
+			return errors.New("usage: edgeguard keys rm ID")
+		}
+		return c.DeleteSetupKey(ctx, args[1])
+	default:
+		return fmt.Errorf("unknown keys command %q", args[0])
+	}
+	return nil
+}
+
+func cmdDevices(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: edgeguard devices ls|rm|set")
+	}
+	c, _, err := adminClient()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "ls":
+		devs, err := c.ListDevices(ctx)
+		if err != nil {
+			return err
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tNAME\tIP\tENDPOINT\tHUB\tSTATUS")
+		for _, d := range devs {
+			ep := "-"
+			if d.Endpoint != nil {
+				ep = *d.Endpoint
+			}
+			status := "offline"
+			if t, err := time.Parse(time.RFC3339, d.LastSeen); err == nil {
+				if time.Since(t) < 6*time.Minute {
+					status = "online"
+				} else {
+					status = "seen " + t.Local().Format("2006-01-02 15:04")
+				}
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%v\t%s\n", d.ID, d.Name, d.IP, ep, d.Hub, status)
+		}
+		w.Flush()
+	case "rm":
+		if len(args) != 2 {
+			return errors.New("usage: edgeguard devices rm ID")
+		}
+		if err := c.DeleteDevice(ctx, args[1]); err != nil {
+			return err
+		}
+		fmt.Println("Removed. Other devices drop it on their next sync.")
+	case "set":
+		if len(args) < 2 {
+			return errors.New("usage: edgeguard devices set ID [--name NAME] [--hub=true|false]")
+		}
+		fs := flag.NewFlagSet("devices set", flag.ExitOnError)
+		name := fs.String("name", "", "new name")
+		hub := fs.String("hub", "", "true or false")
+		fs.Parse(args[2:])
+		patch := map[string]any{}
+		if *name != "" {
+			patch["name"] = *name
+		}
+		switch *hub {
+		case "":
+		case "true":
+			patch["hub"] = true
+		case "false":
+			patch["hub"] = false
+		default:
+			return errors.New("--hub must be true or false")
+		}
+		d, err := c.UpdateDevice(ctx, args[1], patch)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s %s hub=%v\n", d.ID, d.Name, d.Hub)
+	default:
+		return fmt.Errorf("unknown devices command %q", args[0])
+	}
+	return nil
+}
+
+// ---- device agent --------------------------------------------------------------
+
+type deviceFlags struct {
+	iface    *string
+	stateDir *string
+}
+
+func addDeviceFlags(fs *flag.FlagSet) deviceFlags {
+	return deviceFlags{
+		iface:    fs.String("iface", "eg0", "WireGuard interface name"),
+		stateDir: fs.String("state-dir", state.DefaultDir, "where enrollment state is kept"),
+	}
+}
+
+func (d deviceFlags) path() (string, error) {
+	if !wg.ValidIface(*d.iface) {
+		return "", fmt.Errorf("invalid interface name %q", *d.iface)
+	}
+	return state.DevicePath(*d.stateDir, *d.iface), nil
+}
+
+var nameRE = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+
+func defaultName() string {
+	h, _ := os.Hostname()
+	h = strings.Trim(nameRE.ReplaceAllString(h, "-"), "-._")
+	if h == "" {
+		return "device"
+	}
+	if len(h) > 63 {
+		h = h[:63]
+	}
+	return h
+}
+
+func cmdUp(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("up", flag.ExitOnError)
+	df := addDeviceFlags(fs)
+	server := fs.String("server", "", "control plane URL (only needed for the first run)")
+	setupKey := fs.String("setup-key", os.Getenv("EDGEGUARD_SETUP_KEY"), "one-time setup key (first run)")
+	name := fs.String("name", "", "device name (default: hostname)")
+	endpoint := fs.String("endpoint", "", "public HOST:PORT other devices can reach this one on")
+	hub := fs.Bool("hub", false, "make this device the hub that relays for devices behind NAT (needs --endpoint and an admin login)")
+	port := fs.Int("port", 0, "WireGuard listen port (default 51820)")
+	interval := fs.Duration("interval", 30*time.Second, "how often to sync with the control plane")
+	once := fs.Bool("once", false, "sync once, apply and exit (leaves the interface up)")
+	dryRun := fs.Bool("dry-run", false, "print the WireGuard config instead of applying it")
+	fs.Parse(args)
+
+	if !*dryRun && os.Geteuid() != 0 {
+		return errors.New("must run as root to configure WireGuard (or use --dry-run)")
+	}
+	if *interval < 5*time.Second {
+		return errors.New("--interval must be at least 5s")
+	}
+	if *endpoint != "" {
+		if err := wg.ValidateEndpoint(*endpoint); err != nil {
+			return err
+		}
+	}
+	path, err := df.path()
+	if err != nil {
+		return err
+	}
+
+	var dev state.Device
+	err = state.Load(path, &dev)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		dev, err = enroll(ctx, *server, *setupKey, *name, *endpoint, *port)
+		if err != nil {
+			return err
+		}
+		if err := state.Save(path, dev); err != nil {
+			return fmt.Errorf("enrolled as %s but could not save state: %w", dev.DeviceID, err)
+		}
+		fmt.Printf("Enrolled as %s (%s) with address %s\n", dev.Name, dev.DeviceID, dev.IP)
+	case err != nil:
+		return err
+	default:
+		if *server != "" {
+			if base, err := api.ValidateServer(*server); err != nil || base != dev.Server {
+				return fmt.Errorf("this interface is enrolled with %s; use another --iface or `edgeguard leave` first", dev.Server)
+			}
+		}
+		// Flags given on later runs update the stored settings.
+		changed := false
+		fs.Visit(func(f *flag.Flag) {
+			switch f.Name {
+			case "endpoint":
+				dev.Endpoint, changed = *endpoint, true
+			case "port":
+				dev.ListenPort, changed = *port, true
+			}
+		})
+		if changed {
+			if err := state.Save(path, dev); err != nil {
+				return err
+			}
+		}
+	}
+
+	c, err := api.New(dev.Server, dev.DeviceToken)
+	if err != nil {
+		return err
+	}
+	hubSet := false
+	fs.Visit(func(f *flag.Flag) { hubSet = hubSet || f.Name == "hub" })
+	if hubSet {
+		if err := setHub(ctx, c, dev, *hub); err != nil {
+			return err
+		}
+	}
+	last := ""
+	failures := 0
+	for {
+		applied, err := syncOnce(ctx, c, dev, *df.iface, last, *dryRun)
+		switch {
+		case errors.Is(err, api.ErrUnauthorized):
+			if !*dryRun {
+				_ = wg.Down(*df.iface)
+			}
+			_ = state.Remove(path)
+			return errors.New("this device was removed from the network; local state cleared")
+		case err != nil:
+			failures++
+			fmt.Fprintf(os.Stderr, "sync failed (keeping current config): %v\n", err)
+			if *once {
+				return err
+			}
+		default:
+			failures = 0
+			last = applied
+		}
+		if *once {
+			return nil
+		}
+		wait := *interval
+		if failures > 0 {
+			wait = min(*interval*time.Duration(1<<min(failures, 4)), 5*time.Minute)
+		}
+		select {
+		case <-ctx.Done():
+			if !*dryRun {
+				if err := wg.Down(*df.iface); err != nil {
+					return err
+				}
+			}
+			fmt.Println("Interface down.")
+			return nil
+		case <-time.After(wait):
+		}
+	}
+}
+
+// setHub promotes or demotes this device. Only the admin may do that, so it
+// uses the admin login on this machine.
+func setHub(ctx context.Context, c *api.Client, dev state.Device, hub bool) error {
+	if hub && dev.Endpoint == "" {
+		return errors.New("--hub needs --endpoint")
+	}
+	if hub {
+		// The server only accepts a hub that has an endpoint on record.
+		if _, err := c.Sync(ctx, dev.Endpoint); err != nil {
+			return err
+		}
+	}
+	admin, a, err := adminClient()
+	if err != nil {
+		return fmt.Errorf("--hub needs an admin login on this machine (or run `edgeguard devices set %s --hub=%v` as admin): %w", dev.DeviceID, hub, err)
+	}
+	if a.Server != dev.Server {
+		return errors.New("--hub: admin login is for a different server")
+	}
+	_, err = admin.UpdateDevice(ctx, dev.DeviceID, map[string]any{"hub": hub})
+	return err
+}
+
+func enroll(ctx context.Context, server, setupKey, name, endpoint string, port int) (state.Device, error) {
+	var dev state.Device
+	if server == "" || setupKey == "" {
+		// Fall back to the admin login: mint a one-time key for ourselves.
+		c, a, err := adminClient()
+		if err != nil {
+			return dev, errors.New("first run needs --server and --setup-key (or EDGEGUARD_SETUP_KEY), or an admin login")
+		}
+		if server == "" {
+			server = a.Server
+		}
+		if setupKey == "" {
+			if base, _ := api.ValidateServer(server); base != a.Server {
+				return dev, errors.New("--setup-key is required for a server you are not logged in to")
+			}
+			k, err := c.CreateSetupKey(ctx, false, 1, 10*time.Minute)
+			if err != nil {
+				return dev, fmt.Errorf("creating setup key: %w", err)
+			}
+			setupKey = k.Key
+		}
+	}
+	base, err := api.ValidateServer(server)
+	if err != nil {
+		return dev, err
+	}
+	if name == "" {
+		name = defaultName()
+	}
+	if port == 0 {
+		port = 51820
+	}
+	if port < 1 || port > 65535 {
+		return dev, errors.New("--port out of range")
+	}
+	priv, pub, err := wg.GenerateKey()
+	if err != nil {
+		return dev, err
+	}
+	c, err := api.New(base, "")
+	if err != nil {
+		return dev, err
+	}
+	res, err := c.Enroll(ctx, api.EnrollRequest{SetupKey: setupKey, Name: name, PublicKey: pub, Endpoint: endpoint})
+	if err != nil {
+		return dev, fmt.Errorf("enrollment failed: %w", err)
+	}
+	if res.Device.PublicKey != pub {
+		return dev, errors.New("server returned a different public key")
+	}
+	return state.Device{
+		Server:      base,
+		DeviceID:    res.Device.ID,
+		DeviceToken: res.DeviceToken,
+		PrivateKey:  priv,
+		Name:        res.Device.Name,
+		IP:          res.Device.IP,
+		NetworkCIDR: res.Network.CIDR,
+		ListenPort:  port,
+		Endpoint:    endpoint,
+	}, nil
+}
+
+// syncOnce fetches the peer list and applies it if it changed. It returns the
+// rendered config that is now in effect.
+func syncOnce(ctx context.Context, c *api.Client, dev state.Device, iface, last string, dryRun bool) (string, error) {
+	s, err := c.Sync(ctx, dev.Endpoint)
+	if err != nil {
+		return "", err
+	}
+	cfg, err := wg.FromSync(s, dev.NetworkCIDR, dev.PrivateKey, dev.ListenPort)
+	if err != nil {
+		return "", fmt.Errorf("rejected control plane data: %w", err)
+	}
+	rendered := fmt.Sprintf("%s hub=%v\n%s", cfg.Address, s.Self.Hub, cfg.Render())
+	if rendered == last {
+		return last, nil
+	}
+	if dryRun {
+		fmt.Printf("# address %s on %s\n%s\n", cfg.Address, iface, strings.Replace(cfg.Render(), cfg.PrivateKey, "(hidden)", 1))
+		return rendered, nil
+	}
+	// Only a hub forwards between peers.
+	if err := wg.Apply(iface, cfg, s.Self.Hub); err != nil {
+		return "", err
+	}
+	fmt.Printf("Applied config: %s, %d peer(s)\n", cfg.Address, len(cfg.Peers))
+	return rendered, nil
+}
+
+func cmdDown(args []string) error {
+	fs := flag.NewFlagSet("down", flag.ExitOnError)
+	df := addDeviceFlags(fs)
+	fs.Parse(args)
+	return wg.Down(*df.iface)
+}
+
+func cmdLeave(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("leave", flag.ExitOnError)
+	df := addDeviceFlags(fs)
+	fs.Parse(args)
+	path, err := df.path()
+	if err != nil {
+		return err
+	}
+	var dev state.Device
+	if err := state.Load(path, &dev); err != nil {
+		return err
+	}
+	c, err := api.New(dev.Server, dev.DeviceToken)
+	if err != nil {
+		return err
+	}
+	if err := c.Leave(ctx); err != nil && !errors.Is(err, api.ErrUnauthorized) {
+		return err
+	}
+	_ = wg.Down(*df.iface)
+	if err := state.Remove(path); err != nil {
+		return err
+	}
+	fmt.Println("Left the network.")
+	return nil
+}
+
+func cmdStatus(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	df := addDeviceFlags(fs)
+	fs.Parse(args)
+	path, err := df.path()
+	if err != nil {
+		return err
+	}
+	var dev state.Device
+	if err := state.Load(path, &dev); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Println("Not enrolled. Run `sudo edgeguard up --server URL --setup-key KEY`.")
+			return nil
+		}
+		return err
+	}
+	fmt.Printf("Device   %s (%s)\nServer   %s\nAddress  %s in %s\n", dev.Name, dev.DeviceID, dev.Server, dev.IP, dev.NetworkCIDR)
+	if dev.Endpoint != "" {
+		fmt.Printf("Endpoint %s\n", dev.Endpoint)
+	}
+	if c, err := api.New(dev.Server, dev.DeviceToken); err == nil {
+		if s, err := c.Sync(ctx, dev.Endpoint); err == nil {
+			fmt.Printf("Hub      %v\n", s.Self.Hub)
+			fmt.Println("Peers:")
+			for _, p := range s.Peers {
+				fmt.Printf("  %-20s %s\n", p.Name, strings.Join(p.AllowedIPs, ","))
+			}
+		} else {
+			fmt.Println("Control plane:", err)
+		}
+	}
+	if out, err := wg.Show(*df.iface); err == nil {
+		fmt.Print("\n" + out)
+	}
+	return nil
+}

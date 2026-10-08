@@ -1,0 +1,47 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  edge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
+
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build Linux binaries
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o dist/edgeguard-linux-$arch ./cmd/edgeguard
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edgeguard-linux
+          path: client/dist/

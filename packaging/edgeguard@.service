@@ -1,0 +1,30 @@
+# Keeps an enrolled interface up. Enroll once with `sudo edgeguard up ...`
+# (Ctrl-C after "Applied config"), then: systemctl enable --now edgeguard@eg0
+[Unit]
+Description=EdgeGuard WireGuard agent (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/edgeguard up --iface %i
+Restart=on-failure
+RestartSec=10
+# Needs to manage network interfaces; everything else is locked down.
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/edgeguard /proc/sys/net/ipv4/conf -/run/wireguard
+StateDirectory=edgeguard
+StateDirectoryMode=0700
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+{
+  "name": "edgeguard-edge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/dev.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/main.ts --outfile dist/edge-script.js --target browser --external 'https://*' --external 'node:*'"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.20",
+    "typescript": "5.8.3"
+  }
+}
