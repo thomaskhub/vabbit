@@ -1,5 +1,8 @@
 # Using EdgeGuard, start to finish
 
+Pictures of the three common tasks: [connect four nodes](use-cases/1-connect-four-nodes.svg),
+[remove a node](use-cases/2-remove-a-node.svg), [change the admin token](use-cases/3-change-admin-token.svg).
+
 An example: one network called `home`, a cloud VM as the hub, a home-lab server,
 and a laptop. `$` lines run on the machine named in each heading.
 

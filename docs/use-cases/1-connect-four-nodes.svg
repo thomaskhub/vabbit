@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .t { fill: #111827; }
+    .m { fill: #6b7280; }
+    .code { white-space: pre; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 13px; fill: #111827; }
+    .codebox { fill: #f3f4f6; stroke: #e5e7eb; }
+    .num { fill: #2563eb; }
+    .numtxt { fill: #ffffff; font-weight: 700; font-size: 14px; }
+    .step { font-size: 15px; font-weight: 600; fill: #111827; }
+    .node { fill: #ffffff; stroke: #2563eb; stroke-width: 2; }
+    .hub { fill: #eff6ff; stroke: #2563eb; stroke-width: 2.5; }
+    .wg { stroke: #2563eb; stroke-width: 2.5; fill: none; }
+    .sync { stroke: #ea580c; stroke-width: 1.5; stroke-dasharray: 5 5; fill: none; }
+  </style>
+  <rect width="1200" height="720" fill="#ffffff"/>
+
+  <text x="30" y="44" font-size="24" font-weight="700" class="t">Use case 1 · Connect four nodes</text>
+  <text x="30" y="70" font-size="14" class="m">A cloud VM as hub, plus a home-lab server, a laptop and an office PC, all in one network.</text>
+
+  <!-- Steps -->
+  <g transform="translate(30,105)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">1</text>
+    <text x="40" y="19" class="step">Once: create the network</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard admin-token</text>
+    <text x="40" y="78" font-size="13" class="m">Paste the printed hash into the Bunny Edge Script as ADMIN_TOKEN_SHA256.</text>
+  </g>
+  <g transform="translate(30,200)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">2</text>
+    <text x="40" y="19" class="step">Log in as admin (your laptop)</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard login --server https://home-net.b-cdn.net</text>
+  </g>
+  <g transform="translate(30,275)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">3</text>
+    <text x="40" y="19" class="step">Node 1: make the cloud VM the hub</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">sudo edgeguard up --endpoint 203.0.113.10:51820 --hub</text>
+    <text x="40" y="78" font-size="13" class="m">Open UDP 51820 and TCP 443 on the VM. Log in as admin there first.</text>
+  </g>
+  <g transform="translate(30,370)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">4</text>
+    <text x="40" y="19" class="step">Nodes 2–4: one setup key each</text>
+    <text x="40" y="44" font-size="13" class="m">On your laptop:</text>
+    <rect x="40" y="52" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="72" class="code">edgeguard keys create        <tspan class="m">→ egk_7hY…2pQ</tspan></text>
+    <text x="40" y="104" font-size="13" class="m">On the node:</text>
+    <rect x="40" y="112" width="520" height="54" rx="6" class="codebox"/>
+    <text x="52" y="132" class="code">sudo EDGEGUARD_SETUP_KEY=egk_7hY…2pQ edgeguard up \</text>
+    <text x="52" y="154" class="code">    --server https://home-net.b-cdn.net</text>
+    <text x="40" y="190" font-size="13" class="m">On your own laptop you're already admin, so it's just: <tspan class="code">sudo edgeguard up</tspan></text>
+  </g>
+  <g transform="translate(30,580)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">5</text>
+    <text x="40" y="19" class="step">Check</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard devices ls         <tspan class="m">→ 4 nodes, all online</tspan></text>
+  </g>
+
+  <!-- Diagram -->
+  <line x1="610" y1="95" x2="610" y2="690" stroke="#e5e7eb"/>
+
+  <rect x="630" y="92" width="545" height="56" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  <text x="902" y="116" text-anchor="middle" font-size="15" font-weight="700" fill="#9a3412">Bunny Edge Script · network "home"</text>
+  <text x="902" y="137" text-anchor="middle" font-size="12" fill="#9a3412">hands out IPs and peer lists · never sees traffic or private keys</text>
+
+  <!-- HTTPS sync lines (straight up to the control plane) -->
+  <line x1="680" y1="148" x2="680" y2="530" class="sync"/>
+  <line x1="820" y1="148" x2="820" y2="300" class="sync"/>
+  <line x1="960" y1="148" x2="960" y2="530" class="sync"/>
+  <line x1="1100" y1="148" x2="1100" y2="300" class="sync"/>
+
+  <!-- WireGuard tunnels -->
+  <line x1="820" y1="360" x2="690" y2="530" class="wg"/>
+  <line x1="820" y1="360" x2="950" y2="530" class="wg"/>
+  <line x1="884" y1="330" x2="1036" y2="330" class="wg"/>
+  <line x1="744" y1="560" x2="896" y2="560" class="wg"/>
+  <line x1="1024" y1="545" x2="1090" y2="360" class="wg"/>
+  <line x1="744" y1="545" x2="1036" y2="345" class="wg" stroke-opacity="0.55"/>
+  <text x="820" y="582" text-anchor="middle" font-size="12" fill="#1d4ed8">direct (hole-punched)</text>
+
+  <!-- Nodes -->
+  <rect x="756" y="300" width="128" height="60" rx="10" class="hub"/>
+  <text x="820" y="322" text-anchor="middle" font-size="13" font-weight="700" class="t">Cloud VM · hub</text>
+  <text x="820" y="339" text-anchor="middle" font-size="12" class="m">100.92.194.44</text>
+  <text x="820" y="353" text-anchor="middle" font-size="11" class="m">public 203.0.113.10</text>
+
+  <rect x="1036" y="300" width="128" height="60" rx="10" class="node"/>
+  <text x="1100" y="322" text-anchor="middle" font-size="13" font-weight="700" class="t">Office PC</text>
+  <text x="1100" y="339" text-anchor="middle" font-size="12" class="m">100.92.12.9</text>
+  <text x="1100" y="353" text-anchor="middle" font-size="11" class="m">behind office NAT</text>
+
+  <rect x="616" y="530" width="128" height="60" rx="10" class="node"/>
+  <text x="680" y="552" text-anchor="middle" font-size="13" font-weight="700" class="t">Home-lab server</text>
+  <text x="680" y="569" text-anchor="middle" font-size="12" class="m">100.92.171.47</text>
+  <text x="680" y="583" text-anchor="middle" font-size="11" class="m">behind home NAT</text>
+
+  <rect x="896" y="530" width="128" height="60" rx="10" class="node"/>
+  <text x="960" y="552" text-anchor="middle" font-size="13" font-weight="700" class="t">Laptop</text>
+  <text x="960" y="569" text-anchor="middle" font-size="12" class="m">100.92.173.65</text>
+  <text x="960" y="583" text-anchor="middle" font-size="11" class="m">anywhere</text>
+
+  <!-- Legend -->
+  <g transform="translate(630,630)">
+    <line x1="0" y1="8" x2="36" y2="8" class="wg"/>
+    <text x="46" y="13" font-size="12" class="t">WireGuard tunnel (encrypted, peer to peer)</text>
+    <line x1="0" y1="32" x2="36" y2="32" class="sync"/>
+    <text x="46" y="37" font-size="12" class="t">HTTPS sync every 15s (who are my peers?)</text>
+    <text x="0" y="62" font-size="12" class="m">If a direct tunnel can't be punched, that pair talks through the hub.</text>
+  </g>
+</svg>

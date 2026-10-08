@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .t { fill: #111827; }
+    .m { fill: #6b7280; }
+    .code { white-space: pre; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 13px; fill: #111827; }
+    .codebox { fill: #f3f4f6; stroke: #e5e7eb; }
+    .num { fill: #2563eb; }
+    .numtxt { fill: #ffffff; font-weight: 700; font-size: 14px; }
+    .step { font-size: 15px; font-weight: 600; fill: #111827; }
+    .node { fill: #ffffff; stroke: #2563eb; stroke-width: 2; }
+    .hub { fill: #eff6ff; stroke: #2563eb; stroke-width: 2.5; }
+    .wg { stroke: #2563eb; stroke-width: 2.5; fill: none; }
+    .sync { stroke: #ea580c; stroke-width: 1.5; stroke-dasharray: 5 5; fill: none; }
+    .gone { stroke: #dc2626; stroke-width: 2; stroke-dasharray: 6 5; fill: none; }
+    .tl { font-size: 13px; fill: #111827; }
+  </style>
+  <rect width="1200" height="720" fill="#ffffff"/>
+  <text x="30" y="44" font-size="24" font-weight="700" class="t">Use case 2 · Remove one of five nodes</text>
+  <text x="30" y="70" font-size="14" class="m">The old Raspberry Pi is retired. One command cuts it off everywhere; nothing else needs changing.</text>
+  <g transform="translate(30,105)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">1</text>
+    <text x="40" y="19" class="step">Find the node's ID</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard devices ls</text>
+  </g>
+  <g transform="translate(30,180)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">2</text>
+    <text x="40" y="19" class="step">Remove it (from any admin machine)</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard devices rm 93459a6a15040499</text>
+    <text x="40" y="78" font-size="13" class="m">Or, on the node itself: <tspan class="code">sudo edgeguard leave</tspan></text>
+  </g>
+  <g transform="translate(30,290)">
+    <text x="0" y="16" class="step">What happens next</text>
+    <line x1="22" y1="34" x2="22" y2="250" stroke="#d1d5db" stroke-width="2"/>
+    <circle cx="22" cy="40" r="7" fill="#dc2626"/>
+    <text x="44" y="36" class="tl" font-weight="600">0 s · in the edge script</text>
+    <text x="44" y="54" class="tl">The Pi's record and token hash are deleted. Its token is now useless.</text>
+    <circle cx="22" cy="100" r="7" fill="#2563eb"/>
+    <text x="44" y="96" class="tl" font-weight="600">≤ 15 s · on the four remaining nodes</text>
+    <text x="44" y="114" class="tl">Their next sync no longer lists the Pi, so they drop it as a WireGuard</text>
+    <text x="44" y="131" class="tl">peer. Packets from its key are rejected from then on.</text>
+    <circle cx="22" cy="177" r="7" fill="#6b7280"/>
+    <text x="44" y="173" class="tl" font-weight="600">≤ 15 s · on the Pi (if it's online)</text>
+    <text x="44" y="191" class="tl">Its sync is refused, so the agent removes the eg0 interface and</text>
+    <text x="44" y="208" class="tl">deletes its keys. If it's offline, it simply never gets back in.</text>
+    <text x="0" y="262" font-size="13" class="m">To bring it back later it needs a fresh setup key. For temporary machines, create</text>
+    <text x="0" y="280" font-size="13" class="m">the key with <tspan class="code">--device-ttl 7d</tspan> and they remove themselves automatically.</text>
+  </g>
+
+  <line x1="610" y1="95" x2="610" y2="690" stroke="#e5e7eb"/>
+  <rect x="630" y="92" width="545" height="56" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  <text x="902" y="116" text-anchor="middle" font-size="15" font-weight="700" fill="#9a3412">Bunny Edge Script · network "home"</text>
+  <text x="902" y="137" text-anchor="middle" font-size="12" fill="#9a3412">record for the Pi deleted</text>
+
+  <line x1="680" y1="148" x2="680" y2="300" class="sync"/>
+  <line x1="880" y1="148" x2="880" y2="300" class="sync"/>
+  <line x1="1080" y1="148" x2="1080" y2="300" class="sync"/>
+  <line x1="780" y1="148" x2="780" y2="490" class="sync"/>
+  <line x1="980" y1="148" x2="980" y2="490" class="gone"/>
+  <rect x="990" y="388" width="88" height="22" rx="4" fill="#fef2f2"/>
+  <text x="1034" y="404" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">401 refused</text>
+
+  <!-- remaining tunnels -->
+  <line x1="744" y1="330" x2="816" y2="330" class="wg"/>
+  <line x1="944" y1="330" x2="1016" y2="330" class="wg"/>
+  <line x1="860" y1="360" x2="800" y2="490" class="wg"/>
+  <line x1="690" y1="360" x2="760" y2="490" class="wg"/>
+  <line x1="830" y1="490" x2="1040" y2="360" class="wg" stroke-opacity="0.55"/>
+  <!-- tunnels to the Pi, gone -->
+  <line x1="900" y1="360" x2="960" y2="490" class="gone"/>
+  <line x1="1070" y1="360" x2="1010" y2="490" class="gone"/>
+  <line x1="844" y1="530" x2="916" y2="530" class="gone"/>
+  <rect x="616" y="300" width="128" height="60" rx="10" class="node"/>
+  <text x="680" y="322" text-anchor="middle" font-size="13" font-weight="700" class="t">Home-lab server</text>
+  <text x="680" y="339" text-anchor="middle" font-size="12" class="m">100.92.171.47</text>
+  <text x="680" y="353" text-anchor="middle" font-size="11" class="m">behind home NAT</text>
+  <rect x="816" y="300" width="128" height="60" rx="10" class="hub"/>
+  <text x="880" y="322" text-anchor="middle" font-size="13" font-weight="700" class="t">Cloud VM · hub</text>
+  <text x="880" y="339" text-anchor="middle" font-size="12" class="m">100.92.194.44</text>
+  <text x="880" y="353" text-anchor="middle" font-size="11" class="m">public 203.0.113.10</text>
+  <rect x="1016" y="300" width="128" height="60" rx="10" class="node"/>
+  <text x="1080" y="322" text-anchor="middle" font-size="13" font-weight="700" class="t">Office PC</text>
+  <text x="1080" y="339" text-anchor="middle" font-size="12" class="m">100.92.12.9</text>
+  <text x="1080" y="353" text-anchor="middle" font-size="11" class="m">behind office NAT</text>
+  <rect x="716" y="490" width="128" height="60" rx="10" class="node"/>
+  <text x="780" y="512" text-anchor="middle" font-size="13" font-weight="700" class="t">Laptop</text>
+  <text x="780" y="529" text-anchor="middle" font-size="12" class="m">100.92.173.65</text>
+  <text x="780" y="543" text-anchor="middle" font-size="11" class="m">anywhere</text>
+  <rect x="916" y="490" width="128" height="60" rx="10" fill="#f9fafb" stroke="#dc2626" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="980" y="512" text-anchor="middle" font-size="13" font-weight="700" fill="#9ca3af" text-decoration="line-through">Old Pi</text>
+  <text x="980" y="529" text-anchor="middle" font-size="12" fill="#9ca3af">100.92.88.3</text>
+  <text x="980" y="543" text-anchor="middle" font-size="11" fill="#b91c1c">removed</text>
+  <g stroke="#dc2626" stroke-width="4" stroke-linecap="round"><line x1="1030" y1="478" x2="1054" y2="502"/><line x1="1054" y1="478" x2="1030" y2="502"/></g>
+
+  <g transform="translate(630,610)">
+    <line x1="0" y1="8" x2="36" y2="8" class="wg"/>
+    <text x="46" y="13" font-size="12" class="t">tunnel stays up</text>
+    <line x1="200" y1="8" x2="236" y2="8" class="gone"/>
+    <text x="246" y="13" font-size="12" class="t">tunnel / access removed</text>
+    <line x1="0" y1="34" x2="36" y2="34" class="sync"/>
+    <text x="46" y="39" font-size="12" class="t">HTTPS sync every 15s</text>
+    <text x="0" y="66" font-size="12" class="m">The other nodes don't restart or re-key: only the Pi's peer entry disappears.</text>
+  </g>
+</svg>

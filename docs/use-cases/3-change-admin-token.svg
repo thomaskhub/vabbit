@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .t { fill: #111827; }
+    .m { fill: #6b7280; }
+    .code { white-space: pre; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 13px; fill: #111827; }
+    .codebox { fill: #f3f4f6; stroke: #e5e7eb; }
+    .num { fill: #2563eb; }
+    .numtxt { fill: #ffffff; font-weight: 700; font-size: 14px; }
+    .step { font-size: 15px; font-weight: 600; fill: #111827; }
+    .node { fill: #ffffff; stroke: #2563eb; stroke-width: 2; }
+    .hub { fill: #eff6ff; stroke: #2563eb; stroke-width: 2.5; }
+    .wg { stroke: #2563eb; stroke-width: 2.5; fill: none; }
+    .sync { stroke: #ea580c; stroke-width: 1.5; stroke-dasharray: 5 5; fill: none; }
+    .ok { stroke: #16a34a; stroke-width: 2.5; fill: none; }
+    .bad { stroke: #dc2626; stroke-width: 2.5; stroke-dasharray: 6 5; fill: none; }
+  </style>
+  <rect width="1200" height="720" fill="#ffffff"/>
+  <text x="30" y="44" font-size="24" font-weight="700" class="t">Use case 3 · Change the admin token (master password)</text>
+  <text x="30" y="70" font-size="14" class="m">Rotate it any time, or right away if it may have leaked. Your nodes keep running throughout.</text>
+  <g transform="translate(30,105)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">1</text>
+    <text x="40" y="19" class="step">Make a new token</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard admin-token</text>
+    <text x="40" y="78" font-size="13" class="m">Prints a new ega_… token (keep it secret) and its SHA-256 hash.</text>
+  </g>
+  <g transform="translate(30,198)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">2</text>
+    <text x="40" y="19" class="step">Swap the hash in Bunny</text>
+    <text x="40" y="40" font-size="13" class="m">Edge Script → Environment → secret ADMIN_TOKEN_SHA256 → paste the</text>
+    <text x="40" y="58" font-size="13" class="m">new hash and save. From this moment the old token gets 401.</text>
+  </g>
+  <g transform="translate(30,280)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">3</text>
+    <text x="40" y="19" class="step">Log in again on each admin machine</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard login --server https://home-net.b-cdn.net</text>
+    <text x="40" y="78" font-size="13" class="m">Paste the new token when asked. It replaces ~/.config/edgeguard/admin.json.</text>
+  </g>
+  <g transform="translate(30,375)">
+    <circle cx="14" cy="14" r="14" class="num"/><text x="14" y="19" text-anchor="middle" class="numtxt">4</text>
+    <text x="40" y="19" class="step">If the old token may have leaked, also check</text>
+    <rect x="40" y="30" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="50" class="code">edgeguard keys ls        <tspan class="m">→ keys rm &lt;id&gt; for unknown keys</tspan></text>
+    <rect x="40" y="68" width="520" height="30" rx="6" class="codebox"/>
+    <text x="52" y="88" class="code">edgeguard devices ls     <tspan class="m">→ devices rm &lt;id&gt; for unknown nodes</tspan></text>
+    <text x="40" y="116" font-size="13" class="m">Setup keys and joined nodes made with the old token stay valid until you</text>
+    <text x="40" y="134" font-size="13" class="m">remove them: rotating the token alone doesn't undo what it was used for.</text>
+  </g>
+  <g transform="translate(30,560)">
+    <rect x="0" y="0" width="560" height="64" rx="10" fill="#f0fdf4" stroke="#bbf7d0"/>
+    <text x="16" y="26" font-size="14" font-weight="600" fill="#166534">Nothing to do on the nodes.</text>
+    <text x="16" y="47" font-size="13" fill="#166534">Each node signs in with its own device token, never the admin token.</text>
+  </g>
+
+  <line x1="610" y1="95" x2="610" y2="690" stroke="#e5e7eb"/>
+
+  <!-- tokens -->
+  <rect x="640" y="110" width="200" height="64" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="740" y="136" text-anchor="middle" font-size="13" font-weight="700" fill="#991b1b">Old admin token</text>
+  <text x="740" y="157" text-anchor="middle" class="code" fill="#991b1b" text-decoration="line-through">ega_Q3x…k9w</text>
+
+  <rect x="960" y="110" width="200" height="64" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+  <text x="1060" y="136" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">New admin token</text>
+  <text x="1060" y="157" text-anchor="middle" class="code">ega_Zp8…r4c</text>
+
+  <!-- control plane -->
+  <rect x="680" y="270" width="440" height="84" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  <text x="900" y="296" text-anchor="middle" font-size="15" font-weight="700" fill="#9a3412">Bunny Edge Script · network "home"</text>
+  <text x="900" y="318" text-anchor="middle" font-size="12" fill="#9a3412">secret ADMIN_TOKEN_SHA256</text>
+  <text x="900" y="339" text-anchor="middle" class="code"><tspan fill="#991b1b" text-decoration="line-through">a939…a352</tspan>  →  <tspan fill="#166534">7c1e…09bd</tspan></text>
+
+  <path d="M740 174 L 790 268" class="bad"/>
+  <rect x="704" y="208" width="66" height="22" rx="4" fill="#fef2f2"/>
+  <text x="737" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#b91c1c">401 ✕</text>
+  <path d="M1060 174 L 1010 268" class="ok"/>
+  <polygon points="1010,268 1006,254 1018,258" fill="#16a34a"/>
+  <rect x="1032" y="208" width="66" height="22" rx="4" fill="#f0fdf4"/>
+  <text x="1065" y="224" text-anchor="middle" font-size="12" font-weight="700" fill="#166534">200 ✓</text>
+
+  <!-- nodes, unaffected -->
+  <line x1="702" y1="354" x2="702" y2="470" class="sync"/>
+  <line x1="836" y1="354" x2="836" y2="470" class="sync"/>
+  <line x1="964" y1="354" x2="964" y2="470" class="sync"/>
+  <line x1="1098" y1="354" x2="1098" y2="470" class="sync"/>
+  <text x="1112" y="415" font-size="11" fill="#9a3412">device tokens</text>
+  <text x="1112" y="429" font-size="11" fill="#9a3412">(unchanged)</text>
+  <rect x="644" y="470" width="116" height="50" rx="10" class="hub"/>
+  <text x="702" y="500" text-anchor="middle" font-size="13" font-weight="700" class="t">Cloud VM · hub</text>
+  <circle cx="754" cy="474" r="10" fill="#16a34a"/><path d="M749 474 l4 4 l7 -8" stroke="#fff" stroke-width="2.5" fill="none"/>
+  <rect x="778" y="470" width="116" height="50" rx="10" class="node"/>
+  <text x="836" y="500" text-anchor="middle" font-size="13" font-weight="700" class="t">Home-lab</text>
+  <circle cx="888" cy="474" r="10" fill="#16a34a"/><path d="M883 474 l4 4 l7 -8" stroke="#fff" stroke-width="2.5" fill="none"/>
+  <rect x="906" y="470" width="116" height="50" rx="10" class="node"/>
+  <text x="964" y="500" text-anchor="middle" font-size="13" font-weight="700" class="t">Laptop</text>
+  <circle cx="1016" cy="474" r="10" fill="#16a34a"/><path d="M1011 474 l4 4 l7 -8" stroke="#fff" stroke-width="2.5" fill="none"/>
+  <rect x="1040" y="470" width="116" height="50" rx="10" class="node"/>
+  <text x="1098" y="500" text-anchor="middle" font-size="13" font-weight="700" class="t">Office PC</text>
+  <circle cx="1150" cy="474" r="10" fill="#16a34a"/><path d="M1145 474 l4 4 l7 -8" stroke="#fff" stroke-width="2.5" fill="none"/>
+  <line x1="760" y1="495" x2="778" y2="495" class="wg"/>
+  <line x1="894" y1="495" x2="906" y2="495" class="wg"/>
+  <line x1="1022" y1="495" x2="1040" y2="495" class="wg"/>
+  <text x="900" y="550" text-anchor="middle" font-size="13" class="m">Tunnels and syncs carry on without interruption</text>
+
+  <g transform="translate(640,600)">
+    <line x1="0" y1="8" x2="36" y2="8" class="bad"/>
+    <text x="46" y="13" font-size="12" class="t">rejected after the swap</text>
+    <line x1="230" y1="8" x2="266" y2="8" class="ok"/>
+    <text x="276" y="13" font-size="12" class="t">accepted</text>
+    <line x1="0" y1="34" x2="36" y2="34" class="sync"/>
+    <text x="46" y="39" font-size="12" class="t">HTTPS sync with each node's own token</text>
+    <text x="0" y="66" font-size="12" class="m">The edge script only ever stores the hash, so the token itself never leaves your machines.</text>
+  </g>
+</svg>
