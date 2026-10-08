@@ -150,7 +150,7 @@ func lockFile(path string, create bool) (*os.File, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		if err := flock(f); err != nil {
 			f.Close()
 			return nil, fmt.Errorf("lock %s: %w", path, err)
 		}
@@ -193,10 +193,8 @@ func replaceFile(path string, fi os.FileInfo, data []byte) error {
 	if err := tmp.Chmod(fi.Mode().Perm()); err != nil {
 		return err
 	}
-	if st, isUnix := fi.Sys().(*syscall.Stat_t); isUnix && (int(st.Uid) != os.Geteuid() || int(st.Gid) != os.Getegid()) {
-		if err := tmp.Chown(int(st.Uid), int(st.Gid)); err != nil {
-			return err
-		}
+	if err := sameOwner(tmp, fi); err != nil {
+		return err
 	}
 	if err := tmp.Sync(); err != nil {
 		return err
