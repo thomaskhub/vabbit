@@ -7,7 +7,8 @@
     "dev": "bun run src/dev.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build src/main.ts --outfile dist/edge-script.js --target browser --external 'https://*' --external 'node:*'"
+    "build": "bun build src/main.ts --outfile dist/edge-script.js --target browser --external 'https://*' --external 'node:*'",
+    "build:worker": "bun build src/worker.ts --outfile dist/worker.js --target browser --format esm"
   },
   "devDependencies": {
     "@types/bun": "1.2.20",
