@@ -96,6 +96,9 @@ func Run(ctx context.Context, o Options) error {
 			s, err := o.Client.Sync(ctx, staticEP, cands, relayInfo)
 			switch {
 			case errors.Is(err, api.ErrUnauthorized):
+				if strings.Contains(err.Error(), "expired") {
+					return fmt.Errorf("%w: its access expired", ErrRemoved)
+				}
 				return ErrRemoved
 			case err != nil:
 				failures++

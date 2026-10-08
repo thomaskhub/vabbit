@@ -83,10 +83,10 @@ $ sudo systemctl enable --now edgeguard@eg0
 
 ```console
 $ edgeguard devices ls
-ID                NAME    IP             ENDPOINT            HUB    STATUS
-6bfb0852b06969c6  vm      100.92.194.44  203.0.113.10:51820  true   online
-93459a6a15040499  lab     100.92.171.47  -                   false  online
-105888a070d999fb  laptop  100.92.173.65  -                   false  online
+ID                NAME    IP             ENDPOINT            HUB    STATUS  EXPIRES
+6bfb0852b06969c6  vm      100.92.194.44  203.0.113.10:51820  true   online  never
+93459a6a15040499  lab     100.92.171.47  -                   false  online  never
+105888a070d999fb  laptop  100.92.173.65  -                   false  online  never
 
 $ sudo edgeguard status
 Device   laptop (105888a070d999fb)
@@ -108,7 +108,39 @@ To hub   TCP relay 203.0.113.10:443 (UDP blocked)
 lab   100.92.171.47  relay via hub  …
 ```
 
-## 7. Removing things
+## 7. Who gets access, and for how long
+
+Never give the admin token to other machines. Hand out **setup keys** instead; a
+machine uses one once to join and then has its own private device token.
+
+```console
+$ edgeguard keys create                                  # one machine, key valid 24h
+$ edgeguard keys create --ttl 2h                         # short-lived key
+$ edgeguard keys create --reusable --max-uses 5          # up to 5 machines
+$ edgeguard keys create --reusable --ttl never           # never-expiring key (e.g. for VM images)
+$ edgeguard keys create --device-ttl 7d                  # the machine itself is cut off after 7 days
+$ edgeguard keys ls
+ID                REUSABLE  USES  KEY EXPIRES       DEVICE ACCESS
+0045194ab8977934  true      0/∞   never             7d
+fa0772c54dc99bd3  false     0/1   2026-10-08 08:25  until removed
+$ edgeguard keys rm 0045194ab8977934                     # revoke: no new machines can join with it
+```
+
+Revoking a key doesn't remove machines that already joined; remove those with
+`devices rm`. You can also give an existing machine an end date, or take it away:
+
+```console
+$ edgeguard devices set c0257e2673d112c2 --expires 3d
+$ edgeguard devices set c0257e2673d112c2 --expires never
+```
+
+An expired machine drops out of everyone's peer list straight away and its own
+agent shuts the interface down on its next sync.
+
+To revoke the admin token itself, run `edgeguard admin-token` again, replace the hash
+in Bunny and `edgeguard login` with the new token. Devices are not affected.
+
+## 8. Removing things
 
 ```console
 $ edgeguard devices rm 93459a6a15040499    # lab is cut off within ~15s, its interface goes down

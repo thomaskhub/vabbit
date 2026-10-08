@@ -27,6 +27,8 @@ export interface Device {
   tokenHash: string;
   createdAt: number;
   lastSeen: number;
+  /** When the device loses access (ms epoch); null or absent = never. */
+  expiresAt?: number | null;
 }
 
 export interface SetupKey {
@@ -35,7 +37,9 @@ export interface SetupKey {
   reusable: boolean;
   maxUses: number; // 0 = unlimited (reusable keys only)
   uses: number;
-  expiresAt: number;
+  expiresAt: number | null; // null = never
+  /** Devices enrolled with this key lose access this long after joining. */
+  deviceTtlSeconds?: number | null;
   createdAt: number;
 }
 
@@ -59,7 +63,8 @@ const MAX_BODY = 8 * 1024;
 const LAST_SEEN_WRITE_MS = 5 * 60 * 1000;
 const MAX_CANDIDATES = 8;
 const DEFAULT_KEY_TTL = 24 * 3600;
-const MAX_KEY_TTL = 365 * 24 * 3600;
+const MAX_KEY_TTL = 10 * 365 * 24 * 3600;
+const MAX_DEVICE_TTL = 10 * 365 * 24 * 3600;
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -173,6 +178,11 @@ class Api {
       sha256Hex(token),
     ]);
     if (!dev || !timingSafeEqual(hash, dev.tokenHash)) throw new HttpError(401, "unauthorized");
+    if (expired(dev, this.now())) {
+      // Clean up so it also disappears from the admin's list.
+      await this.store.delete(`devices/${dev.id}.json`);
+      throw new HttpError(401, "device access expired");
+    }
     return dev;
   }
 
@@ -181,7 +191,9 @@ class Api {
   private async createSetupKey(req: Request): Promise<Response> {
     const body = await readJson(req);
     const reusable = optBool(body.reusable, "reusable") ?? false;
-    const ttl = optInt(body.ttlSeconds, "ttlSeconds", 60, MAX_KEY_TTL) ?? DEFAULT_KEY_TTL;
+    // ttlSeconds 0 = the key never expires (revoke it with DELETE when done).
+    const ttl = body.ttlSeconds === 0 ? 0 : (optInt(body.ttlSeconds, "ttlSeconds", 60, MAX_KEY_TTL) ?? DEFAULT_KEY_TTL);
+    const deviceTtl = optInt(body.deviceTtlSeconds, "deviceTtlSeconds", 60, MAX_DEVICE_TTL) ?? null;
     const maxUses = optInt(body.maxUses, "maxUses", 0, 100000) ?? (reusable ? 0 : 1);
     if (!reusable && maxUses !== 1) throw new HttpError(400, "one-time keys have maxUses 1");
 
@@ -194,7 +206,8 @@ class Api {
       reusable,
       maxUses,
       uses: 0,
-      expiresAt: t + ttl * 1000,
+      expiresAt: ttl === 0 ? null : t + ttl * 1000,
+      deviceTtlSeconds: deviceTtl,
       createdAt: t,
     };
     await this.store.put(`setup-keys/${hash}.json`, rec);
@@ -217,7 +230,7 @@ class Api {
   }
 
   /** Validates a setup key and consumes one use. */
-  private async consumeSetupKey(key: unknown): Promise<void> {
+  private async consumeSetupKey(key: unknown): Promise<SetupKey> {
     if (typeof key !== "string" || !/^egk_[A-Za-z0-9_-]{43}$/.test(key)) {
       throw new HttpError(401, "invalid setup key");
     }
@@ -225,11 +238,12 @@ class Api {
     const storeKey = `setup-keys/${hash}.json`;
     const rec = await this.store.get<SetupKey>(storeKey);
     if (!rec || !timingSafeEqual(rec.hash, hash)) throw new HttpError(401, "invalid setup key");
-    if (rec.expiresAt <= this.now()) throw new HttpError(401, "setup key expired");
+    if (rec.expiresAt !== null && rec.expiresAt <= this.now()) throw new HttpError(401, "setup key expired");
     if (rec.maxUses !== 0 && rec.uses >= rec.maxUses) throw new HttpError(401, "setup key used up");
     rec.uses++;
     if (!rec.reusable && rec.uses >= rec.maxUses) await this.store.delete(storeKey);
     else await this.store.put(storeKey, rec);
+    return rec;
   }
 
   // ---- devices ---------------------------------------------------------------
@@ -251,7 +265,7 @@ class Api {
     if (body.hub !== undefined) throw new HttpError(400, "hub can only be set by the admin");
 
     // Validate everything before consuming the key.
-    await this.consumeSetupKey(body.setupKey);
+    const setupKey = await this.consumeSetupKey(body.setupKey);
 
     const devices = await this.allDevices();
     if (devices.some((d) => d.publicKey === publicKey)) {
@@ -273,6 +287,7 @@ class Api {
       tokenHash: await sha256Hex(token),
       createdAt: t,
       lastSeen: t,
+      expiresAt: setupKey.deviceTtlSeconds ? t + setupKey.deviceTtlSeconds * 1000 : null,
     };
     await this.store.put(`devices/${id}.json`, dev);
     return json(201, {
@@ -299,6 +314,11 @@ class Api {
     if (hub !== undefined) {
       if (hub && !dev.endpoint) throw new HttpError(400, "a hub needs a public endpoint");
       dev.hub = hub;
+    }
+    // expiresInSeconds: a number sets a new end date from now, null removes it.
+    if (body.expiresInSeconds === null) dev.expiresAt = null;
+    else if (body.expiresInSeconds !== undefined) {
+      dev.expiresAt = this.now() + optInt(body.expiresInSeconds, "expiresInSeconds", 60, MAX_DEVICE_TTL)! * 1000;
     }
     await this.store.put(key, dev);
     return json(200, { device: publicDevice(dev) });
@@ -332,7 +352,7 @@ class Api {
       self: publicDevice(self),
       network: { name: this.cfg.networkName, cidr: this.cidr.text },
       address: `${self.ip}/${this.cidr.bits}`,
-      peers: computePeers(self, devices),
+      peers: computePeers(self, devices.filter((d) => !expired(d, t))),
     });
   }
 }
@@ -357,6 +377,14 @@ export function computePeers(self: Device, devices: Device[]): Peer[] {
     }));
 }
 
+function expired(d: Device, now: number): boolean {
+  return d.expiresAt != null && d.expiresAt <= now;
+}
+
+function iso(ms: number | null | undefined): string | null {
+  return ms == null ? null : new Date(ms).toISOString();
+}
+
 function publicDevice(d: Device) {
   return {
     id: d.id,
@@ -368,6 +396,7 @@ function publicDevice(d: Device) {
     hub: d.hub,
     createdAt: new Date(d.createdAt).toISOString(),
     lastSeen: new Date(d.lastSeen).toISOString(),
+    expiresAt: iso(d.expiresAt),
   };
 }
 
@@ -377,7 +406,8 @@ function publicKey(k: SetupKey) {
     reusable: k.reusable,
     maxUses: k.maxUses,
     uses: k.uses,
-    expiresAt: new Date(k.expiresAt).toISOString(),
+    expiresAt: iso(k.expiresAt),
+    deviceTtlSeconds: k.deviceTtlSeconds ?? null,
     createdAt: new Date(k.createdAt).toISOString(),
   };
 }

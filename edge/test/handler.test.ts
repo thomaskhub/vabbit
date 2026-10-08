@@ -84,6 +84,34 @@ describe("setup keys", () => {
     expect((await call("POST", "/api/v1/enroll", { setupKey: k2.body.key, name: "c", publicKey: KEY3 })).status).toBe(401);
   });
 
+  test("never-expiring key and expiring devices", async () => {
+    const { call, now } = await setup();
+    const k = await call("POST", "/api/v1/setup-keys", { reusable: true, ttlSeconds: 0, deviceTtlSeconds: 3600 }, ADMIN);
+    expect(k.body.expiresAt).toBeNull();
+    now.t += 5 * 365 * 24 * 3600 * 1000; // years later the key still works
+    const a = await call("POST", "/api/v1/enroll", { setupKey: k.body.key, name: "guest", publicKey: KEY1 });
+    expect(a.status).toBe(201);
+    expect(a.body.device.expiresAt).toBe(new Date(now.t + 3600_000).toISOString());
+    const plain = (await call("POST", "/api/v1/setup-keys", {}, ADMIN)).body.key;
+    const b = await call("POST", "/api/v1/enroll", { setupKey: plain, name: "b", publicKey: KEY2 });
+    expect(b.body.device.expiresAt).toBeNull();
+    expect((await call("POST", "/api/v1/sync", {}, b.body.deviceToken)).body.peers).toHaveLength(1);
+
+    now.t += 3601_000;
+    // The guest is gone from everyone's peer list and loses access itself.
+    expect((await call("POST", "/api/v1/sync", {}, b.body.deviceToken)).body.peers).toHaveLength(0);
+    const s = await call("POST", "/api/v1/sync", {}, a.body.deviceToken);
+    expect(s.status).toBe(401);
+    expect(s.body.error).toBe("device access expired");
+
+    // Admin can set and clear an end date later; revoking the key stops new joins.
+    const bid = b.body.device.id;
+    expect((await call("PATCH", `/api/v1/devices/${bid}`, { expiresInSeconds: 600 }, ADMIN)).body.device.expiresAt).not.toBeNull();
+    expect((await call("PATCH", `/api/v1/devices/${bid}`, { expiresInSeconds: null }, ADMIN)).body.device.expiresAt).toBeNull();
+    await call("DELETE", `/api/v1/setup-keys/${k.body.id}`, undefined, ADMIN);
+    expect((await call("POST", "/api/v1/enroll", { setupKey: k.body.key, name: "c", publicKey: KEY3 })).status).toBe(401);
+  });
+
   test("invalid input does not consume the key", async () => {
     const { call } = await setup();
     const k = await call("POST", "/api/v1/setup-keys", {}, ADMIN);

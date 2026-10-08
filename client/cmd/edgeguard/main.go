@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -34,12 +35,12 @@ Admin:
   edgeguard admin-token                       generate an admin token and its SHA-256 for the edge script
   edgeguard login --server URL [--token T]    save admin credentials (prompts for the token if omitted)
   edgeguard logout
-  edgeguard keys create [--reusable] [--max-uses N] [--ttl 24h]
+  edgeguard keys create [--reusable] [--max-uses N] [--ttl 24h|7d|never] [--device-ttl 30d]
   edgeguard keys ls
   edgeguard keys rm ID
   edgeguard devices ls
   edgeguard devices rm ID
-  edgeguard devices set ID [--name NAME] [--hub=true|false]
+  edgeguard devices set ID [--name NAME] [--hub=true|false] [--expires 7d|never]
 
 Device (Linux, run as root):
   edgeguard up [--server URL] [--setup-key KEY] [--name NAME] [--endpoint HOST:PORT] [--hub]
@@ -184,27 +185,45 @@ func cmdKeys(ctx context.Context, args []string) error {
 		fs := flag.NewFlagSet("keys create", flag.ExitOnError)
 		reusable := fs.Bool("reusable", false, "allow the key to enroll more than one device")
 		maxUses := fs.Int("max-uses", 0, "limit uses of a reusable key (0 = unlimited)")
-		ttl := fs.Duration("ttl", 24*time.Hour, "how long the key is valid")
+		ttlFlag := fs.String("ttl", "24h", "how long the key can be used: e.g. 2h, 7d, or never")
+		devTTLFlag := fs.String("device-ttl", "never", "devices enrolled with this key lose access this long after joining, e.g. 7d")
 		fs.Parse(args[1:])
-		k, err := c.CreateSetupKey(ctx, *reusable, *maxUses, *ttl)
+		ttl, err := parseLifetime(*ttlFlag)
+		if err != nil {
+			return fmt.Errorf("--ttl: %w", err)
+		}
+		devTTL, err := parseLifetime(*devTTLFlag)
+		if err != nil {
+			return fmt.Errorf("--device-ttl: %w", err)
+		}
+		k, err := c.CreateSetupKey(ctx, api.SetupKeyOptions{Reusable: *reusable, MaxUses: *maxUses, TTL: ttl, DeviceTTL: devTTL})
 		if err != nil {
 			return err
 		}
 		fmt.Println(k.Key)
-		fmt.Fprintf(os.Stderr, "id %s, expires %s. On the device run:\n  sudo EDGEGUARD_SETUP_KEY=%s edgeguard up --server <URL>\n", k.ID, k.ExpiresAt, k.Key)
+		devices := "devices keep access until removed"
+		if k.DeviceTTLSeconds != nil {
+			devices = "devices lose access " + humanDuration(time.Duration(*k.DeviceTTLSeconds)*time.Second) + " after joining"
+		}
+		fmt.Fprintf(os.Stderr, "id %s, key expires %s, %s. On the device run:\n  sudo EDGEGUARD_SETUP_KEY=%s edgeguard up --server <URL>\n",
+			k.ID, whenOrNever(k.ExpiresAt), devices, k.Key)
 	case "ls":
 		keys, err := c.ListSetupKeys(ctx)
 		if err != nil {
 			return err
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tREUSABLE\tUSES\tEXPIRES")
+		fmt.Fprintln(w, "ID\tREUSABLE\tUSES\tKEY EXPIRES\tDEVICE ACCESS")
 		for _, k := range keys {
 			limit := "∞"
 			if k.MaxUses > 0 {
 				limit = fmt.Sprint(k.MaxUses)
 			}
-			fmt.Fprintf(w, "%s\t%v\t%d/%s\t%s\n", k.ID, k.Reusable, k.Uses, limit, k.ExpiresAt)
+			access := "until removed"
+			if k.DeviceTTLSeconds != nil {
+				access = humanDuration(time.Duration(*k.DeviceTTLSeconds) * time.Second)
+			}
+			fmt.Fprintf(w, "%s\t%v\t%d/%s\t%s\t%s\n", k.ID, k.Reusable, k.Uses, limit, whenOrNever(k.ExpiresAt), access)
 		}
 		w.Flush()
 	case "rm":
@@ -233,7 +252,7 @@ func cmdDevices(ctx context.Context, args []string) error {
 			return err
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tNAME\tIP\tENDPOINT\tHUB\tSTATUS")
+		fmt.Fprintln(w, "ID\tNAME\tIP\tENDPOINT\tHUB\tSTATUS\tEXPIRES")
 		for _, d := range devs {
 			ep := "-"
 			if d.Endpoint != nil {
@@ -247,7 +266,7 @@ func cmdDevices(ctx context.Context, args []string) error {
 					status = "seen " + t.Local().Format("2006-01-02 15:04")
 				}
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%v\t%s\n", d.ID, d.Name, d.IP, ep, d.Hub, status)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%v\t%s\t%s\n", d.ID, d.Name, d.IP, ep, d.Hub, status, whenOrNever(d.ExpiresAt))
 		}
 		w.Flush()
 	case "rm":
@@ -260,13 +279,25 @@ func cmdDevices(ctx context.Context, args []string) error {
 		fmt.Println("Removed. Other devices drop it on their next sync.")
 	case "set":
 		if len(args) < 2 {
-			return errors.New("usage: edgeguard devices set ID [--name NAME] [--hub=true|false]")
+			return errors.New("usage: edgeguard devices set ID [--name NAME] [--hub=true|false] [--expires 7d|never]")
 		}
 		fs := flag.NewFlagSet("devices set", flag.ExitOnError)
 		name := fs.String("name", "", "new name")
 		hub := fs.String("hub", "", "true or false")
+		expires := fs.String("expires", "", "remove the device's access this long from now (e.g. 7d), or never")
 		fs.Parse(args[2:])
 		patch := map[string]any{}
+		if *expires != "" {
+			d, err := parseLifetime(*expires)
+			if err != nil {
+				return fmt.Errorf("--expires: %w", err)
+			}
+			if d == 0 {
+				patch["expiresInSeconds"] = nil
+			} else {
+				patch["expiresInSeconds"] = int(d.Seconds())
+			}
+		}
 		if *name != "" {
 			patch["name"] = *name
 		}
@@ -283,7 +314,7 @@ func cmdDevices(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s %s hub=%v\n", d.ID, d.Name, d.Hub)
+		fmt.Printf("%s %s hub=%v expires=%s\n", d.ID, d.Name, d.Hub, whenOrNever(d.ExpiresAt))
 	default:
 		return fmt.Errorf("unknown devices command %q", args[0])
 	}
@@ -425,12 +456,57 @@ func cmdUp(ctx context.Context, args []string) error {
 	})
 	if errors.Is(err, agent.ErrRemoved) {
 		_ = state.Remove(path)
-		return errors.New("this device was removed from the network; interface removed and local state cleared")
+		return fmt.Errorf("%v; interface removed and local state cleared", err)
 	}
 	if err == nil {
 		fmt.Println("Interface down.")
 	}
 	return err
+}
+
+// parseLifetime accepts Go durations plus days ("7d", "1d12h") and "never"
+// (returned as 0).
+func parseLifetime(s string) (time.Duration, error) {
+	if s == "never" || s == "0" {
+		return 0, nil
+	}
+	var days time.Duration
+	if i := strings.Index(s, "d"); i > 0 {
+		n, err := strconv.Atoi(s[:i])
+		if err != nil || n < 0 {
+			return 0, fmt.Errorf("invalid duration %q", s)
+		}
+		days, s = time.Duration(n)*24*time.Hour, s[i+1:]
+	}
+	var rest time.Duration
+	if s != "" {
+		var err error
+		if rest, err = time.ParseDuration(s); err != nil || rest < 0 {
+			return 0, fmt.Errorf("invalid duration %q (use e.g. 2h, 7d or never)", s)
+		}
+	}
+	d := days + rest
+	if d < time.Minute {
+		return 0, errors.New("must be at least 1m, or never")
+	}
+	return d, nil
+}
+
+func humanDuration(d time.Duration) string {
+	if d >= 24*time.Hour && d%(24*time.Hour) == 0 {
+		return fmt.Sprintf("%dd", d/(24*time.Hour))
+	}
+	return d.String()
+}
+
+func whenOrNever(iso *string) string {
+	if iso == nil {
+		return "never"
+	}
+	if t, err := time.Parse(time.RFC3339, *iso); err == nil {
+		return t.Local().Format("2006-01-02 15:04")
+	}
+	return *iso
 }
 
 func relayListen(v string) string {
@@ -478,7 +554,7 @@ func enroll(ctx context.Context, server, setupKey, name, endpoint string, port i
 			if base, _ := api.ValidateServer(server); base != a.Server {
 				return dev, errors.New("--setup-key is required for a server you are not logged in to")
 			}
-			k, err := c.CreateSetupKey(ctx, false, 1, 10*time.Minute)
+			k, err := c.CreateSetupKey(ctx, api.SetupKeyOptions{MaxUses: 1, TTL: 10 * time.Minute})
 			if err != nil {
 				return dev, fmt.Errorf("creating setup key: %w", err)
 			}

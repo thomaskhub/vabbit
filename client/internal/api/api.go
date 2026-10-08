@@ -133,15 +133,27 @@ type Device struct {
 	Hub       bool    `json:"hub"`
 	CreatedAt string  `json:"createdAt"`
 	LastSeen  string  `json:"lastSeen"`
+	ExpiresAt *string `json:"expiresAt"` // nil = never
 }
 
 type SetupKey struct {
-	Key       string `json:"key,omitempty"`
-	ID        string `json:"id"`
-	Reusable  bool   `json:"reusable"`
-	MaxUses   int    `json:"maxUses"`
-	Uses      int    `json:"uses"`
-	ExpiresAt string `json:"expiresAt"`
+	Key       string  `json:"key,omitempty"`
+	ID        string  `json:"id"`
+	Reusable  bool    `json:"reusable"`
+	MaxUses   int     `json:"maxUses"`
+	Uses      int     `json:"uses"`
+	ExpiresAt *string `json:"expiresAt"` // nil = never
+	// DeviceTTLSeconds limits how long devices enrolled with this key keep access.
+	DeviceTTLSeconds *int `json:"deviceTtlSeconds"`
+}
+
+// SetupKeyOptions configures a new setup key. Zero TTL means it never expires;
+// zero DeviceTTL means enrolled devices keep access until removed.
+type SetupKeyOptions struct {
+	Reusable  bool
+	MaxUses   int
+	TTL       time.Duration
+	DeviceTTL time.Duration
 }
 
 type Peer struct {
@@ -184,10 +196,13 @@ func (c *Client) Network(ctx context.Context) (Network, error) {
 	return n, c.do(ctx, "GET", "/api/v1/network", nil, &n)
 }
 
-func (c *Client) CreateSetupKey(ctx context.Context, reusable bool, maxUses int, ttl time.Duration) (SetupKey, error) {
-	in := map[string]any{"reusable": reusable, "ttlSeconds": int(ttl.Seconds())}
-	if maxUses > 0 {
-		in["maxUses"] = maxUses
+func (c *Client) CreateSetupKey(ctx context.Context, o SetupKeyOptions) (SetupKey, error) {
+	in := map[string]any{"reusable": o.Reusable, "ttlSeconds": int(o.TTL.Seconds())}
+	if o.MaxUses > 0 {
+		in["maxUses"] = o.MaxUses
+	}
+	if o.DeviceTTL > 0 {
+		in["deviceTtlSeconds"] = int(o.DeviceTTL.Seconds())
 	}
 	var k SetupKey
 	return k, c.do(ctx, "POST", "/api/v1/setup-keys", in, &k)

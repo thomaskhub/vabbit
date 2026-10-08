@@ -26,9 +26,13 @@ only their SHA-256 hashes and compares in constant time.
    lives only in the admin's `~/.config/edgeguard/admin.json` (mode 0600) after
    `edgeguard login`.
 2. **Setup key** (`egk_…`). Created by the admin. One-time by default, with an
-   expiry (default 24h) and optional use limit. Used once by a device to enroll.
+   expiry (default 24h, or never) and optional use limit. Used once by a device
+   to enroll. Can carry a device lifetime (`--device-ttl`): devices enrolled
+   with it get an `expiresAt`. Revoked by deleting it.
 3. **Device token** (`egd_<id>.<secret>`). Returned once at enrollment. The
-   device uses it to sync. Deleting the device on the server revokes it.
+   device uses it to sync. Deleting the device revokes it; so does reaching its
+   `expiresAt` (the admin can set or clear that later). Expired devices are
+   left out of every peer list and their record is deleted on their next call.
 
 ## Device flow
 
