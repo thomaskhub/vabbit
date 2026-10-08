@@ -56,7 +56,7 @@ waitfor 'control plane up' curl -fsS $server/healthz
 export VABBIT_ADMIN_PASSWORD=macos-smoke-test
 printf '%s\n' "$tok" | v $vb login --server $server >/dev/null
 ok 'admin login'
-key() { v $vb keys create | grep -oE 'vbk_[A-Za-z0-9_-]{43}'; }
+key() { v $vb keys create | grep -oE 'vbk_[A-Za-z0-9_-]{43}' | head -n 1; }
 # A second device, so the Mac has a peer and a name to resolve.
 v sudo VABBIT_SETUP_KEY="$(key)" $vb up --server $server --name peer --iface vb9 \
   --state-dir "$(mktemp -d)" --dry-run >/dev/null
