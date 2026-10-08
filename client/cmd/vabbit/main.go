@@ -169,7 +169,8 @@ func readLine(r io.Reader) (string, error) {
 	if err != nil && line == "" {
 		return "", err
 	}
-	return strings.TrimSpace(line), nil
+	// Windows PowerShell can put a byte order mark in front of what it pipes to a program.
+	return strings.TrimSpace(strings.TrimPrefix(line, "\ufeff")), nil
 }
 
 // openLogin decrypts the admin login with the master password. With create,

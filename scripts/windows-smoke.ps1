@@ -61,6 +61,9 @@ try {
   WaitFor { try { (Invoke-WebRequest -UseBasicParsing "$server/healthz").StatusCode -eq 200 } catch { $false } } 'control plane up'
 
   $env:VABBIT_ADMIN_PASSWORD = 'windows-smoke-test'
+  # The token itself must work before it goes through vabbit's stdin.
+  $r = Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = "Bearer $tok" } "$server/api/v1/network"
+  Check ($r.StatusCode -eq 200) "admin token accepted by the control plane (token length $($tok.Length))"
   $tok | V login --server $server | Out-Null
   Write-Host 'ok   admin login'
   $key = { ([regex]'vbk_[A-Za-z0-9_-]{43}').Match((V keys create)).Value }
