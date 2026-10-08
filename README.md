@@ -116,3 +116,7 @@ cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :878
 vabbit login --server http://127.0.0.1:8787 --token vba_...
 sudo vabbit up --dry-run                 # syncs once and prints the peers instead of starting
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).

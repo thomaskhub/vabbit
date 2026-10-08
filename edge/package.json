@@ -1,6 +1,7 @@
 {
   "name": "vabbit-edge",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "bun run src/dev.ts",
