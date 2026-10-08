@@ -61,16 +61,11 @@ func NewPlanner() *Planner { return &Planner{peers: map[string]*peerState{}, kic
 // Kick makes the next plan force a handshake towards the peer.
 func (p *Planner) Kick(key string) { p.kick[key] = true }
 
-func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map[string]wg.PeerStat) ([]wg.PeerConfig, map[string]Path) {
-	// Only one hub can own the network route; pick the first, like the server orders them.
-	hubKey := ""
-	if !n.SelfHub {
-		for _, peer := range peers {
-			if peer.Hub {
-				hubKey = peer.PublicKey
-				break
-			}
-		}
+// Plan computes every peer's config. hubKey is the hub that carries the
+// network route (see hubPicker); other hubs are treated like any peer.
+func (p *Planner) Plan(now time.Time, n Network, peers []ResolvedPeer, stats map[string]wg.PeerStat, hubKey string) ([]wg.PeerConfig, map[string]Path) {
+	if n.SelfHub {
+		hubKey = ""
 	}
 
 	cfgs := make([]wg.PeerConfig, 0, len(peers))

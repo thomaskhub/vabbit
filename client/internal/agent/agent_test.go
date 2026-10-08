@@ -89,7 +89,7 @@ func TestPlannerRelaysUntilPunchSucceeds(t *testing.T) {
 	n := Network{CIDR: cidr}
 	t0 := time.Unix(1_700_000_000, 0)
 
-	cfgs, paths := p.Plan(t0, n, peers(true), nil)
+	cfgs, paths := p.Plan(t0, n, peers(true), nil, kHub)
 	c := byKey(cfgs)
 	if len(c[kA].AllowedIPs) != 0 || paths[kA] != PathRelay {
 		t.Fatalf("before punch: want relay with no allowed IPs, got %+v %v", c[kA], paths[kA])
@@ -102,12 +102,12 @@ func TestPlannerRelaysUntilPunchSucceeds(t *testing.T) {
 	}
 
 	// Nothing yet after 10s: rotate to the next candidate.
-	cfgs, _ = p.Plan(t0.Add(10*time.Second), n, peers(true), nil)
+	cfgs, _ = p.Plan(t0.Add(10*time.Second), n, peers(true), nil, kHub)
 	if c := byKey(cfgs); c[kA].Endpoint != aLAN {
 		t.Fatalf("want rotation to LAN candidate, got %+v", c[kA])
 	}
 	// In between rotations the endpoint is left alone.
-	cfgs, _ = p.Plan(t0.Add(12*time.Second), n, peers(true), nil)
+	cfgs, _ = p.Plan(t0.Add(12*time.Second), n, peers(true), nil, kHub)
 	if c := byKey(cfgs); c[kA].Endpoint.IsValid() || c[kA].Kick {
 		t.Fatalf("should not touch endpoint between rotations, got %+v", c[kA])
 	}
@@ -115,14 +115,14 @@ func TestPlannerRelaysUntilPunchSucceeds(t *testing.T) {
 	// Handshake: go direct and stop steering the endpoint (roaming owns it).
 	now := t0.Add(14 * time.Second)
 	stats := map[string]wg.PeerStat{kA: {LastHandshake: now.Add(-time.Second)}}
-	cfgs, paths = p.Plan(now, n, peers(true), stats)
+	cfgs, paths = p.Plan(now, n, peers(true), stats, kHub)
 	c = byKey(cfgs)
 	if paths[kA] != PathDirect || len(c[kA].AllowedIPs) != 1 || c[kA].AllowedIPs[0] != netip.PrefixFrom(ipA, 32) || c[kA].Endpoint.IsValid() {
 		t.Fatalf("want direct /32, got %+v %v", c[kA], paths[kA])
 	}
 
 	// Session goes stale: back to relay and punching resumes.
-	cfgs, paths = p.Plan(now.Add(4*time.Minute), n, peers(true), stats)
+	cfgs, paths = p.Plan(now.Add(4*time.Minute), n, peers(true), stats, kHub)
 	if c := byKey(cfgs); paths[kA] != PathRelay || len(c[kA].AllowedIPs) != 0 || !c[kA].Kick {
 		t.Fatalf("want relay after stale handshake, got %+v %v", c[kA], paths[kA])
 	}
@@ -130,7 +130,7 @@ func TestPlannerRelaysUntilPunchSucceeds(t *testing.T) {
 
 func TestPlannerWithoutHubRoutesDirectly(t *testing.T) {
 	p := NewPlanner()
-	cfgs, paths := p.Plan(time.Now(), Network{CIDR: cidr}, peers(false), nil)
+	cfgs, paths := p.Plan(time.Now(), Network{CIDR: cidr}, peers(false), nil, "")
 	c := byKey(cfgs)
 	if len(c[kA].AllowedIPs) != 1 || paths[kA] != PathConnecting {
 		t.Fatalf("without a hub the /32 must stay on the peer, got %+v %v", c[kA], paths[kA])
@@ -139,7 +139,7 @@ func TestPlannerWithoutHubRoutesDirectly(t *testing.T) {
 
 func TestPlannerAsHub(t *testing.T) {
 	p := NewPlanner()
-	cfgs, _ := p.Plan(time.Now(), Network{CIDR: cidr, SelfHub: true}, peers(false), nil)
+	cfgs, _ := p.Plan(time.Now(), Network{CIDR: cidr, SelfHub: true}, peers(false), nil, "")
 	if c := byKey(cfgs); len(c[kA].AllowedIPs) != 1 {
 		t.Fatalf("a hub routes every peer's /32, got %+v", c[kA])
 	}
@@ -148,7 +148,7 @@ func TestPlannerAsHub(t *testing.T) {
 func TestPlannerPrefersLANBehindSameNAT(t *testing.T) {
 	p := NewPlanner()
 	p.MyPublic = aPub.Addr()
-	cfgs, _ := p.Plan(time.Now(), Network{CIDR: cidr}, peers(false), nil)
+	cfgs, _ := p.Plan(time.Now(), Network{CIDR: cidr}, peers(false), nil, "")
 	if c := byKey(cfgs); c[kA].Endpoint != aLAN {
 		t.Fatalf("same public IP: want LAN candidate first, got %v", c[kA].Endpoint)
 	}

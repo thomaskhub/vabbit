@@ -13,13 +13,15 @@
 #              fall back to the hub.
 #   hotel      lap's network drops all UDP: lap must tunnel to the hub over
 #              TLS on TCP 443 on its own.
-# Default: all three.
+#   failover   symmetric NATs and a second hub (hub2, 198.18.0.10): when the
+#              first hub dies, lap and phone must move to hub2 by themselves.
+# Default: all four.
 #
 # Needs root, iproute2, iptables, ping, openssl, bun and go.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 W=$(mktemp -d)
-NS=(inet natA natB lap phone hub)
+NS=(inet natA natB lap phone hub hub2)
 PIDS=()
 stop_all() {
   for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done
@@ -48,18 +50,20 @@ link() { # nsA ifA addrA nsB ifB addrB
 setup() { # nat mode: cone | symmetric
   for n in "${NS[@]}"; do ip netns add "eg-$n"; x "$n" ip link set lo up; done
   link inet i-hub 203.0.113.1/24 hub wan 203.0.113.10/24
+  link inet i-hub2 198.18.0.1/24 hub2 wan 198.18.0.10/24
   link inet i-natA 198.51.100.1/24 natA wan 198.51.100.10/24
   link inet i-natB 192.0.2.1/24 natB wan 192.0.2.10/24
   link natA lan 192.168.1.1/24 lap eth0 192.168.1.2/24
   link natB lan 192.168.1.1/24 phone eth0 192.168.1.3/24
   for ip in 9.9.9.9 9.9.9.10 9.9.9.20; do x inet ip addr add $ip/32 dev lo; done
   x hub ip route add default via 203.0.113.1
+  x hub2 ip route add default via 198.18.0.1
   x natA ip route add default via 198.51.100.1
   x natB ip route add default via 192.0.2.1
   x lap ip route add default via 192.168.1.1
   x phone ip route add default via 192.168.1.1
   local extra=""
-  [ "$1" = symmetric ] && extra="--random-fully"
+  [ "$1" = symmetric ] || [ "$1" = failover ] && extra="--random-fully"
   for n in inet natA natB; do x $n sysctl -qw net.ipv4.ip_forward=1; done
   for n in natA natB; do
     x $n iptables -t nat -A POSTROUTING -o wan -j MASQUERADE $extra
@@ -123,6 +127,10 @@ run() {
   echo "$TOKEN" | x hub "$EG" login --server $SRV >/dev/null
   agent hub --endpoint 203.0.113.10:51820 --hub
   sleep 2
+  if [ "$mode" = failover ]; then
+    agent hub2 --endpoint 198.18.0.10:51820 --hub
+    sleep 2
+  fi
   for n in lap phone; do VABBIT_SETUP_KEY=$(x hub "$EG" keys create 2>/dev/null) agent "$n"; done
 
   local want=direct
@@ -143,7 +151,18 @@ run() {
   check "lap -> hub" x lap ping -c2 -W2 "$(ipof hub)"
   status lap
 
-  if [ "$mode" = cone ]; then
+  if [ "$mode" = failover ]; then
+    wait_for lap "peer hub2: direct" 30
+    check "hub2 is the backup" status_has lap hub2 'backup hub'
+    pkill -f -- "--iface eghub --state-dir"
+    echo "ok   first hub stopped"
+    wait_for lap "using hub hub2" 90
+    wait_for phone "using hub hub2" 90
+    sleep 3
+    check "lap -> phone via hub2" x lap ping -c6 -W2 "$(x hub2 "$EG" devices ls | awk '$2=="phone"{print $3}')"
+    check "phone -> lap via hub2" x phone ping -c6 -W2 "$(x hub2 "$EG" devices ls | awk '$2=="lap"{print $3}')"
+    check "status shows hub2 as the hub" status_has lap hub2 'direct (hub)'
+  elif [ "$mode" = cone ]; then
     # Direct really bypasses the hub: lap's session to phone points at natB's public address.
     check "lap reaches phone at natB's public address" status_has lap phone '192.0.2.10:'
   else
@@ -164,6 +183,6 @@ run() {
 }
 
 modes=("$@")
-[ ${#modes[@]} -eq 0 ] && modes=(cone symmetric hotel)
+[ ${#modes[@]} -eq 0 ] && modes=(cone symmetric hotel failover)
 for m in "${modes[@]}"; do run "$m"; done
 echo PASS

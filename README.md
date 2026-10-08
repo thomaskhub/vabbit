@@ -222,8 +222,10 @@ What it needs, either way:
 * A public IPv4 address, with **UDP 51820** and **TCP 443** open in its firewall
   (or `--tcp-relay off` to skip the TCP fallback).
 * Only the admin can make a hub, because a hub can see the traffic it relays.
-* Today devices use the oldest hub only; a second one is a cold spare (switch it
-  with `vabbit devices set`).
+* **Backup hubs:** mark two or more devices as hubs for redundancy. Every device uses
+  the oldest one and, if it stops answering for 40s, moves to the next hub that does,
+  by itself. It stays there (no flapping back). `vabbit status` shows `direct (hub)`
+  for the hub in use and `direct (backup hub)` for the others.
 
 **A. A separate small VM, used only as hub (recommended).** Any VM with 1 vCPU and
 512 MB is plenty; the admin token never touches it.

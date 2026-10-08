@@ -101,11 +101,18 @@ and devices do the punching themselves.
    STUN shows UDP works (left the hotel). Peers other than the hub are reached
    through the hub meanwhile. Nothing changes network-wide; each device decides
    for itself. The control plane is already HTTPS, so it keeps working.
+7. **Backup hubs.** The admin can mark several hubs. Each device routes the
+   network through one (the oldest at first) and treats the others as ordinary
+   peers, whose keepalives show they are alive. When the hub in use sends
+   nothing for 40s, the device moves to the first other hub that still answers,
+   or tries them in turn, and resets its transport to UDP for the new hub. It
+   stays on the new hub when the old one returns, so traffic doesn't flap.
 
 `scripts/e2e-nat.sh` tests this with real tunnels: two laptops behind separate
 emulated home routers (MASQUERADE plus an inbound firewall) connect directly;
 with port-randomising ("symmetric") NATs they fall back to the hub; with all
-UDP dropped ("hotel") the laptop switches to TCP 443 and still reaches everyone.
+UDP dropped ("hotel") the laptop switches to TCP 443 and still reaches everyone;
+with two hubs ("failover") killing the first moves both laptops to the second.
 
 ## Storage
 

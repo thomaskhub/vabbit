@@ -66,6 +66,8 @@ func Run(ctx context.Context, o Options) error {
 		peerByName = map[string]string{}
 		udpWorks   bool
 		trans      transport
+		hubs       = newHubPicker()
+		lastHubKey string
 		relaySrv   *relay.Server
 		relayInfo  *api.Relay
 	)
@@ -150,8 +152,22 @@ func Run(ctx context.Context, o Options) error {
 				return err
 			}
 			now := time.Now()
+			hubKey := ""
 			if !netw.SelfHub {
-				hub := hubPeer(resolved)
+				hubKey = hubs.pick(now, resolved, stats)
+				if hubKey != lastHubKey {
+					if lastHubKey != "" {
+						o.Logf("hub %s stopped answering; using hub %s", peerByName[lastHubKey], peerByName[hubKey])
+						// Start over on UDP with the new hub.
+						if trans.tcp {
+							dev.UseUDP()
+							writeTransport(dev.Name, "UDP")
+						}
+						trans = transport{}
+					}
+					lastHubKey = hubKey
+				}
+				hub := peerByKey(resolved, hubKey)
 				var hubStat wg.PeerStat
 				hasRelay := hub != nil && hub.Relay != nil && len(hub.Candidates) > 0
 				if hub != nil {
@@ -175,7 +191,7 @@ func Run(ctx context.Context, o Options) error {
 					}
 				}
 			}
-			cfgs, paths := planner.Plan(now, netw, resolved, stats)
+			cfgs, paths := planner.Plan(now, netw, resolved, stats, hubKey)
 			if err := dev.Configure(cfgs); err != nil {
 				return fmt.Errorf("configuring peers: %w", err)
 			}
@@ -208,9 +224,9 @@ func TransportFile(iface string) string { return "/var/run/wireguard/" + iface +
 
 func writeTransport(iface, s string) { _ = os.WriteFile(TransportFile(iface), []byte(s+"\n"), 0o600) }
 
-func hubPeer(peers []ResolvedPeer) *ResolvedPeer {
+func peerByKey(peers []ResolvedPeer, key string) *ResolvedPeer {
 	for i := range peers {
-		if peers[i].Hub {
+		if key != "" && peers[i].PublicKey == key {
 			return &peers[i]
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/netip"
 	"os"
 	"os/signal"
 	"regexp"
@@ -749,8 +750,10 @@ func cmdStatus(ctx context.Context, args []string) error {
 		if ok {
 			alive := !st.LastHandshake.IsZero() && time.Since(st.LastHandshake) < 3*time.Minute
 			switch {
-			case alive && p.Hub && !n.SelfHub:
+			case alive && p.Hub && !n.SelfHub && carriesNetwork(st.AllowedIPs):
 				path = "direct (hub)"
+			case alive && p.Hub && !n.SelfHub:
+				path = "direct (backup hub)"
 			case alive:
 				path = "direct"
 			case len(st.AllowedIPs) == 0:
@@ -768,4 +771,15 @@ func cmdStatus(ctx context.Context, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.Name, p.IP, path, ep, hs)
 	}
 	return w.Flush()
+}
+
+// carriesNetwork reports whether a peer holds the network route, i.e. it is
+// the hub currently in use.
+func carriesNetwork(ips []netip.Prefix) bool {
+	for _, p := range ips {
+		if p.Bits() < 32 {
+			return true
+		}
+	}
+	return false
 }
