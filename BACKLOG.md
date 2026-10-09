@@ -9,9 +9,7 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
       and the local dev server. Run `vabbit deploy init` and `apply` with a real
       `BUNNY_API_KEY`, join two machines plus a hub, and fix whatever breaks. This is the most
       important open item.
-- [ ] **Make the repo public.** The history was scanned and holds no secrets. The agent proxy
-      cannot change repo settings, so the owner does it in GitHub: Settings → General →
-      Danger Zone → Change visibility. Until then `install.sh` needs `GITHUB_TOKEN`.
+- [x] **Make the repo public.** Done by the owner on 2026-10-09; installs need no `GITHUB_TOKEN` now.
 - [ ] **First release `v0.1.0`.** Pre-releases `v0.1.0-rc.1` to `rc.4` (rc.3: PRs 1-5 and `vabbit deploy`; rc.4: Windows client; rc.5: macOS client) were published on 2026-10-08
       and its installer and enrollment against the local dev server worked. Tag `v0.1.0` after
       the real Bunny test (push the tag, or run the release workflow by hand with `tag=v0.1.0`;
