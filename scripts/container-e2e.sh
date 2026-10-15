@@ -66,7 +66,9 @@ for i in 0 1; do
   n=${names[$i]}
   "$engine" run -d --name "$n" --hostname "e2e-$([ $i = 0 ] && echo a || echo b)-$tag" \
     --cap-add NET_ADMIN --device /dev/net/tun \
-    -v "$bin:/usr/local/bin/vabbit:ro" "$image" sleep 3600 >/dev/null
+    "$image" sleep 3600 >/dev/null
+  # copy, not bind-mount: SELinux (Fedora) blocks executing a mounted host file
+  "$engine" cp "$bin" "$n:/usr/local/bin/vabbit"
   "$engine" exec -e VABBIT_SETUP_KEY="$key" -d "$n" sh -c \
     "exec vabbit up --server '$server' --name e2e-$([ $i = 0 ] && echo a || echo b)-$tag >/var/log/vabbit.log 2>&1"
 done
