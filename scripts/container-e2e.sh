@@ -23,6 +23,7 @@ mkdir -p "$cache"
 
 cleanup() {
   [ "${KEEP:-0}" = 1 ] && { echo "kept: ${names[*]} (remove with: $engine rm -f ${names[*]})"; return; }
+  for n in "${names[@]}"; do "$engine" exec "$n" vabbit leave >/dev/null 2>&1 || true; done  # drop the device from the network
   "$engine" rm -f "${names[@]}" >/dev/null 2>&1 || true
   "$engine" network rm "$net" >/dev/null 2>&1 || true
 }
