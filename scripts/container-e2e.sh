@@ -34,7 +34,11 @@ case $(uname -m) in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "
 if [ -n "${VABBIT_BIN:-}" ]; then
   bin=$VABBIT_BIN
 else
-  ver=${VABBIT_VERSION:-$(curl -fsSL "https://api.github.com/repos/$repo/releases?per_page=1" | grep -m1 '"tag_name"' | cut -d'"' -f4)}
+  ver=${VABBIT_VERSION:-}
+  if [ -z "$ver" ]; then
+    rel=$(curl -fsSL "https://api.github.com/repos/$repo/releases?per_page=1")
+    ver=$(printf '%s' "$rel" | grep -m1 '"tag_name"' | cut -d'"' -f4)
+  fi
   [ -n "$ver" ] || { echo "could not find a release" >&2; exit 1; }
   bin=$cache/vabbit-$ver-linux-$arch
   if [ ! -x "$bin" ]; then
