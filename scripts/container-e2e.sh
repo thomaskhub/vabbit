@@ -17,12 +17,14 @@ engine=${ENGINE:-$(command -v podman || command -v docker || true)}
 image=docker.io/library/alpine:3.20
 tag=$$
 names=(vabbit-e2e-a-$tag vabbit-e2e-b-$tag)
+net=vabbit-e2e-$tag   # own bridge: rootless podman's default network gives every container the host IP
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/vabbit-e2e
 mkdir -p "$cache"
 
 cleanup() {
   [ "${KEEP:-0}" = 1 ] && { echo "kept: ${names[*]} (remove with: $engine rm -f ${names[*]})"; return; }
   "$engine" rm -f "${names[@]}" >/dev/null 2>&1 || true
+  "$engine" network rm "$net" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 step() { printf '\n== %s\n' "$*"; }
@@ -63,10 +65,11 @@ echo "ok"
 
 # 3. containers
 step "start containers"
+"$engine" network create "$net" >/dev/null
 for i in 0 1; do
   n=${names[$i]}
   "$engine" run -d --name "$n" --hostname "e2e-$([ $i = 0 ] && echo a || echo b)-$tag" \
-    --cap-add NET_ADMIN --device /dev/net/tun --security-opt label=disable \
+    --cap-add NET_ADMIN --device /dev/net/tun --security-opt label=disable --network "$net" \
     "$image" sleep 3600 >/dev/null
   # copy, not bind-mount: SELinux (Fedora) blocks executing a mounted host file
   "$engine" cp "$bin" "$n:/usr/local/bin/vabbit"
