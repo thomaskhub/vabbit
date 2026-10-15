@@ -153,11 +153,28 @@ cd edge && ADMIN_TOKEN_SHA256=<hash> bun run dev   # local control plane on :878
 | One-line installer from GitHub raw + tagged releases | Easy client setup |
 | macOS devices: utun + launchd, hubs stay Linux-only; macOS CI by hand only | Owner pays for CI minutes and macOS runners cost 10x |
 | Windows devices: Wintun + a Windows service, hubs stay Linux-only | Owner can test Windows; forwarding/NAT on Windows is a different world, so hubs are not ported |
+| Bunny returns script hostnames as full URLs | `Script.Hostname()` strips the scheme (a doubled `https://` broke the health check) |
 | `vabbit-deploy` merged into `vabbit` as `vabbit deploy` | One program to install and explain; gives Mac admins a `vabbit` build. Deploy code on devices is harmless: it needs the Bunny API key |
 
-## Where things stand (2026-10-08)
+## Where things stand (2026-10-15)
 
-All of the above is built, documented and green in CI, but it has **only been tested against a
-fake Bunny API and local servers**. The security report is a Claude Doc owned by the
+Built, documented and green in CI, and now **tested against a real Bunny account** (deploy,
+enrollment, direct tunnel, hub relay, failover). Still untested: a real NAT, Windows and macOS
+clients on real machines. The security report is a Claude Doc owned by the
 owner: <https://claude.ai/code/artifact/31eb14d0-2a2d-4504-85b6-b2b9a2ac1f1e> (risk numbers
 in BACKLOG.md refer to it). Next steps are in [BACKLOG.md](BACKLOG.md).
+
+### Manual container tests (podman or docker, real control plane)
+
+```sh
+export PATH=$PWD/dist:$PATH VABBIT_SERVER=https://<script>.bunny.run
+VABBIT_BIN=$PWD/dist/vabbit scripts/container-e2e.sh       # two devices, ping + messages
+VABBIT_BIN=$PWD/dist/vabbit scripts/container-hub-e2e.sh   # two hubs, relay + failover
+```
+
+Both need the admin login on the machine and create a `--replace` key, so reruns take over
+the old `e2e-*` entries; devices `leave` on exit. Lessons from running them with rootless
+podman on Fedora: copy the binary in with `cp` (SELinux blocks a bind-mounted binary), use
+`--security-opt label=disable` for `/dev/net/tun`, give containers their own network (the
+default pasta network gives every container the host's IP, so endpoints collide), and run hub
+containers `--privileged` so the agent can write `/proc/sys/.../forwarding`.

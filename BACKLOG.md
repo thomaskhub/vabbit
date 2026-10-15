@@ -5,10 +5,12 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
 
 ## Needs the owner
 
-- [ ] **Test against a real Bunny account.** Everything so far ran against a fake Bunny API
-      and the local dev server. Run `vabbit deploy init` and `apply` with a real
-      `BUNNY_API_KEY`, join two machines plus a hub, and fix whatever breaks. This is the most
-      important open item.
+- [x] **Test against a real Bunny account.** Done 2026-10-15: `vabbit deploy init` and `apply`
+      against a real account, two containers enrolled and exchanged messages
+      (`scripts/container-e2e.sh`), and hub relay plus failover to a second hub took 40s
+      (`scripts/container-hub-e2e.sh`). Found and fixed: Bunny returns the hostname as a full
+      URL (doubled `https://`). Not covered: a real NAT (needs a VM or two real networks),
+      hole punching and STUN against real routers.
 - [x] **Make the repo public.** Done by the owner on 2026-10-09; installs need no `GITHUB_TOKEN` now.
 - [ ] **First release `v0.1.0`.** Pre-releases `v0.1.0-rc.1` to `rc.4` (rc.3: PRs 1-5 and `vabbit deploy`; rc.4: Windows client; rc.5: macOS client) were published on 2026-10-08
       and its installer and enrollment against the local dev server worked. Tag `v0.1.0` after
@@ -39,6 +41,10 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
 - [ ] **macOS client: test on a real Mac.** Built on 2026-10-08 (utun, `ifconfig`/`route`, launchd
       service `com.vabbit.<iface>`, `install.sh`). `scripts/macos-smoke.sh` runs only by hand
       (workflow `macos`), because macOS CI minutes cost 10x; run it sparingly.
+- [ ] **Ephemeral devices.** A device that has not synced for N minutes is removed
+      automatically (the server already has `last_seen`). Today a destroyed machine stays
+      listed until `devices rm` or its `--device-ttl`; `keys create --replace` only covers a
+      machine that comes back under the same name.
 - [ ] IPv6 VPN addresses (IPv6 endpoint candidates are done, PR #2).
 - [ ] A DNS server for device names. Today names are written to `/etc/hosts` as `<name>.vabbit`
       (PR #4); existing installs need the new `vabbit@.service` for that.
