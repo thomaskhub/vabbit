@@ -66,7 +66,7 @@ step "start containers"
 for i in 0 1; do
   n=${names[$i]}
   "$engine" run -d --name "$n" --hostname "e2e-$([ $i = 0 ] && echo a || echo b)-$tag" \
-    --cap-add NET_ADMIN --device /dev/net/tun \
+    --cap-add NET_ADMIN --device /dev/net/tun --security-opt label=disable \
     "$image" sleep 3600 >/dev/null
   # copy, not bind-mount: SELinux (Fedora) blocks executing a mounted host file
   "$engine" cp "$bin" "$n:/usr/local/bin/vabbit"
