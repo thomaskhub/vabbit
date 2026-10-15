@@ -97,7 +97,8 @@ wait_vb() { # NAME
 dev_id() { vabbit devices ls | awk -v n="e2e-$1" '$2==n{print $1}' | head -n1; }
 
 for n in "${names[@]}"; do
-  create "$n" $(case $n in hub*) echo "--sysctl net.ipv4.ip_forward=1 --sysctl net.ipv4.conf.default.forwarding=1" ;; esac)
+  # hubs: --privileged only so /proc/sys is writable (the agent switches forwarding on when promoted)
+  create "$n" $(case $n in hub*) echo "--privileged" ;; esac)
 done
 
 # 4. hubs: enroll with an endpoint, then the admin (this machine) promotes them, hub1 first
