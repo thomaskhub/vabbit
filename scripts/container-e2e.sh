@@ -2,19 +2,19 @@
 # Manual end-to-end test: two small Alpine containers join your real Vabbit network,
 # then exchange messages over the tunnel (ping + TCP via nc, both directions).
 #
-#   VABBIT_SERVER=https://<your-script>.b-cdn.net scripts/docker-e2e.sh
+#   VABBIT_SERVER=https://<your-script>.b-cdn.net scripts/container-e2e.sh
 #
 # Setup key: VABBIT_SETUP_KEY (reusable, 2+ uses), or leave unset and the script runs
 # `vabbit keys create --reusable` with the admin login on this machine.
-# Env: VABBIT_VERSION (default: latest release incl. pre-releases), ENGINE (docker|podman),
+# Env: VABBIT_VERSION (default: latest release incl. pre-releases), ENGINE (podman|docker),
 #      KEEP=1 (leave containers running), VABBIT_BIN (use a local linux binary instead).
 set -euo pipefail
 
 server=${VABBIT_SERVER:?set VABBIT_SERVER to your control plane URL}
 repo=${VABBIT_REPO:-thomaskhub/vabbit}
-engine=${ENGINE:-$(command -v docker || command -v podman || true)}
-[ -n "$engine" ] || { echo "need docker or podman" >&2; exit 1; }
-image=alpine:3.20
+engine=${ENGINE:-$(command -v podman || command -v docker || true)}
+[ -n "$engine" ] || { echo "need podman or docker" >&2; exit 1; }
+image=docker.io/library/alpine:3.20
 tag=$$
 names=(vabbit-e2e-a-$tag vabbit-e2e-b-$tag)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/vabbit-e2e
