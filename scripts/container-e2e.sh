@@ -59,7 +59,7 @@ fi
 step "setup key"
 key=${VABBIT_SETUP_KEY:-}
 if [ -z "$key" ]; then
-  key=$(vabbit keys create --reusable --max-uses 2 --ttl 1h --device-ttl 1d | grep -oE 'vbk_[A-Za-z0-9_-]+' | head -n1)
+  key=$(vabbit keys create --reusable --max-uses 2 --ttl 1h --device-ttl 1d --replace | grep -oE 'vbk_[A-Za-z0-9_-]+' | head -n1)
 fi
 [ -n "$key" ] || { echo "no setup key" >&2; exit 1; }
 echo "ok"
@@ -69,13 +69,13 @@ step "start containers"
 "$engine" network create "$net" >/dev/null
 for i in 0 1; do
   n=${names[$i]}
-  "$engine" run -d --name "$n" --hostname "e2e-$([ $i = 0 ] && echo a || echo b)-$tag" \
+  "$engine" run -d --name "$n" --hostname "e2e-$([ $i = 0 ] && echo a || echo b)" \
     --cap-add NET_ADMIN --device /dev/net/tun --security-opt label=disable --network "$net" \
     "$image" sleep 3600 >/dev/null
   # copy, not bind-mount: SELinux (Fedora) blocks executing a mounted host file
   "$engine" cp "$bin" "$n:/usr/local/bin/vabbit"
   "$engine" exec -e VABBIT_SETUP_KEY="$key" -d "$n" sh -c \
-    "exec vabbit up --server '$server' --name e2e-$([ $i = 0 ] && echo a || echo b)-$tag >/var/log/vabbit.log 2>&1"
+    "exec vabbit up --server '$server' --name e2e-$([ $i = 0 ] && echo a || echo b) >/var/log/vabbit.log 2>&1"
 done
 
 ipof() { "$engine" exec "$1" ip -4 -o addr show dev vb0 2>/dev/null | awk '{print $4}' | cut -d/ -f1; }
