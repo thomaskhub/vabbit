@@ -183,13 +183,20 @@ type Script struct {
 func (s Script) Hostname() string {
 	for _, p := range s.LinkedPullZones {
 		if p.DefaultHostname != "" {
-			return p.DefaultHostname
+			return bareHost(p.DefaultHostname)
 		}
 	}
 	if s.DefaultHostname != "" {
-		return s.DefaultHostname
+		return bareHost(s.DefaultHostname)
 	}
-	return s.SystemHostname
+	return bareHost(s.SystemHostname)
+}
+
+// bareHost drops a scheme and trailing slash: the API returns some hostnames
+// as full URLs (https://name.bunny.run).
+func bareHost(h string) string {
+	h = strings.TrimPrefix(strings.TrimPrefix(h, "https://"), "http://")
+	return strings.TrimRight(h, "/")
 }
 
 func (s Script) Variable(name string) (Variable, bool) {
