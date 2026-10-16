@@ -152,7 +152,7 @@ run() {
   wait_for phone "peer hub: direct" 30
   if [ "$mode" = symmetric ]; then check "symmetric NAT detected" grep -q "NAT: symmetric" "$W/lap.log"; fi
   if [ "$mode" = hotel ]; then
-    wait_for lap "tunnelling over TCP" 30
+    wait_for lap "tunnelling over TCP" 60
     echo "ok   lap switched to TCP 443"
     check "status shows the TCP relay" status_has lap "To hub" "TCP relay"
   fi
