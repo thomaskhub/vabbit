@@ -20,9 +20,11 @@ type transport struct {
 }
 
 const (
-	// Before anything arrives in a mode, the handshake answer comes within a
-	// second, so give up on a mode quickly.
-	firstContactTimeout = 12 * time.Second
+	// Before anything arrives in a mode, give up on it. A hub answers within a
+	// second, but a device that has just enrolled is unknown to the hubs until
+	// their next sync (15s), so this must be longer than one sync interval or a
+	// new device on a good network falls back to TCP for no reason.
+	firstContactTimeout = 35 * time.Second
 	// Once traffic flowed, allow for the 25s keepalive interval.
 	silenceTimeout = 40 * time.Second
 	// While on TCP, retry UDP this often if STUN shows UDP works again.

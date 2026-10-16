@@ -157,14 +157,14 @@ func TestPlannerPrefersLANBehindSameNAT(t *testing.T) {
 func TestTransportFallsBackToTCPAndRetriesUDP(t *testing.T) {
 	var tr transport
 	t0 := time.Unix(1_700_000_000, 0)
-	// UDP blocked: nothing from the hub for 12s -> TCP.
-	if tr.step(t0, true, wg.PeerStat{}, false) || tr.step(t0.Add(10*time.Second), true, wg.PeerStat{}, false) {
+	// UDP blocked: nothing from the hub for 35s -> TCP (longer than a sync, so a new device is not misjudged).
+	if tr.step(t0, true, wg.PeerStat{}, false) || tr.step(t0.Add(30*time.Second), true, wg.PeerStat{}, false) {
 		t.Fatal("switched too early")
 	}
-	if !tr.step(t0.Add(13*time.Second), true, wg.PeerStat{}, false) {
+	if !tr.step(t0.Add(36*time.Second), true, wg.PeerStat{}, false) {
 		t.Fatal("should fall back to TCP")
 	}
-	tr.toggle(t0.Add(13 * time.Second))
+	tr.toggle(t0.Add(36 * time.Second))
 	// Traffic flows over TCP: stay, even with 30s gaps between keepalives.
 	now := t0.Add(15 * time.Second)
 	for i := uint64(1); i <= 12; i++ {
