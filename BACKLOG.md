@@ -11,9 +11,11 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
       (`scripts/container-hub-e2e.sh`). Found and fixed: Bunny returns the hostname as a full
       URL (doubled `https://`). Also 2026-10-16: `scripts/lightsail-e2e.sh` created a Lightsail
       VM, installed vabbit with `install.sh`/systemd, promoted it to hub, and a local podman
-      client behind the home NAT reached it and exchanged a message. Not covered: client to
-      client across a real NAT (two Lightsail VMs, or a phone hotspot), symmetric NAT and
-      hotel Wi-Fi, the TLS relay on 443, hub failover on the real internet.
+      client behind the home NAT reached it and exchanged a message. With `VMS=2`: direct path
+      to a second hub across the NAT, and failover between hubs over the internet in 37s.
+      Found and fixed: a new device fell back to the TCP relay after 12s, shorter than a sync.
+      Not covered: client to client across a real NAT (needs a third site, e.g. a phone
+      hotspot), symmetric NAT and hotel Wi-Fi, the TLS relay on 443 in a real UDP-blocked network.
 - [x] **Make the repo public.** Done by the owner on 2026-10-09; installs need no `GITHUB_TOKEN` now.
 - [ ] **First release `v0.1.0`.** Pre-releases `v0.1.0-rc.1` to `rc.4` (rc.3: PRs 1-5 and `vabbit deploy`; rc.4: Windows client; rc.5: macOS client) were published on 2026-10-08
       and its installer and enrollment against the local dev server worked. Tag `v0.1.0` after
@@ -48,6 +50,8 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
       automatically (the server already has `last_seen`). Today a destroyed machine stays
       listed until `devices rm` or its `--device-ttl`; `keys create --replace` only covers a
       machine that comes back under the same name.
+- [ ] `vabbit status` keeps printing `To hub ... TCP relay (UDP blocked)` after the client
+      moved back to UDP (seen 2026-10-16); the transport file is not rewritten on every change.
 - [ ] IPv6 VPN addresses (IPv6 endpoint candidates are done, PR #2).
 - [ ] A DNS server for device names. Today names are written to `/etc/hosts` as `<name>.vabbit`
       (PR #4); existing installs need the new `vabbit@.service` for that.
