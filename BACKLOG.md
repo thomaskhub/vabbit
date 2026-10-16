@@ -9,8 +9,11 @@ Open work for Vabbit, roughly in priority order. Background and past decisions a
       against a real account, two containers enrolled and exchanged messages
       (`scripts/container-e2e.sh`), and hub relay plus failover to a second hub took 40s
       (`scripts/container-hub-e2e.sh`). Found and fixed: Bunny returns the hostname as a full
-      URL (doubled `https://`). Not covered: a real NAT (needs a VM or two real networks),
-      hole punching and STUN against real routers.
+      URL (doubled `https://`). Also 2026-10-16: `scripts/lightsail-e2e.sh` created a Lightsail
+      VM, installed vabbit with `install.sh`/systemd, promoted it to hub, and a local podman
+      client behind the home NAT reached it and exchanged a message. Not covered: client to
+      client across a real NAT (two Lightsail VMs, or a phone hotspot), symmetric NAT and
+      hotel Wi-Fi, the TLS relay on 443, hub failover on the real internet.
 - [x] **Make the repo public.** Done by the owner on 2026-10-09; installs need no `GITHUB_TOKEN` now.
 - [ ] **First release `v0.1.0`.** Pre-releases `v0.1.0-rc.1` to `rc.4` (rc.3: PRs 1-5 and `vabbit deploy`; rc.4: Windows client; rc.5: macOS client) were published on 2026-10-08
       and its installer and enrollment against the local dev server worked. Tag `v0.1.0` after

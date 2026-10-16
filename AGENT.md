@@ -170,6 +170,8 @@ in BACKLOG.md refer to it). Next steps are in [BACKLOG.md](BACKLOG.md).
 export PATH=$PWD/dist:$PATH VABBIT_SERVER=https://<script>.bunny.run
 VABBIT_BIN=$PWD/dist/vabbit scripts/container-e2e.sh       # two devices, ping + messages
 VABBIT_BIN=$PWD/dist/vabbit scripts/container-hub-e2e.sh   # two hubs, relay + failover
+# Lightsail VM as a real hub, local container as a NATed client (billed, a few cents; asks first)
+local-vault exec <aws-profile> -- env VABBIT_BIN=$PWD/dist/vabbit scripts/lightsail-e2e.sh
 ```
 
 Both need the admin login on the machine and create a `--replace` key, so reruns take over
