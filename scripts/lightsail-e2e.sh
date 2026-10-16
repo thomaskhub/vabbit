@@ -99,9 +99,12 @@ else
 fi
 
 step "setup keys"
-mkkey() { vabbit keys create --ttl 1h --device-ttl 1d --replace 2>/dev/null | grep -oE 'vbk_[A-Za-z0-9_-]+' | head -n1; }
-hubkey=$(mkkey); clientkey=$(mkkey)
-[ -n "$hubkey" ] && [ -n "$clientkey" ] || { echo "could not create setup keys" >&2; exit 1; }
+mkkey() {
+  local out
+  out=$(vabbit keys create --ttl 1h --device-ttl 1d --replace 2>&1) || { echo "vabbit keys create failed (wrong master password?): $out" >&2; return 1; }
+  grep -oE 'vbk_[A-Za-z0-9_-]+' <<<"$out" | head -n1
+}
+hubkey=$(mkkey) && clientkey=$(mkkey) || exit 1
 ok "two single-use keys"
 
 step "create VM"
