@@ -181,7 +181,7 @@ step "local client container (behind your NAT)"
   --security-opt label=disable "$image" sleep 3600 >/dev/null
 "$engine" cp "$bin" "$ctr:/usr/local/bin/vabbit"
 "$engine" exec -e VABBIT_SETUP_KEY="$clientkey" -d "$ctr" sh -c \
-  "exec vabbit up --server '$server' --name $clientname >/var/log/vabbit.log 2>&1"
+  "exec vabbit up --server '$server' --name $clientname --port 41820 >/var/log/vabbit.log 2>&1"   # not 51820: a host WireGuard on that port breaks UDP from it
 for _ in $(seq 60); do
   "$engine" exec "$ctr" ip -4 -o addr show dev vb0 >/dev/null 2>&1 && break; sleep 1
 done
@@ -196,6 +196,9 @@ for _ in $(seq 60); do
 done
 [ $good = 1 ] || fail "no reply from the hub over the tunnel (is UDP 51820 open? did the hub start?)"
 ok "ping"
+sleep 3
+"$engine" exec "$ctr" vabbit status | grep -q "TCP relay" && fail "the client fell back to the TCP relay: UDP to the hub does not work from this machine (firewall? another WireGuard on the port?)"
+ok "UDP path (no TCP relay)"
 "$engine" exec "$ctr" vabbit status | grep -q "e2e-hub1.*direct (hub)" || fail "client does not use hub1 as its hub"
 ok "client uses hub1"
 
