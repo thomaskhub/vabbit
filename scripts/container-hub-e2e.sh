@@ -27,6 +27,9 @@ cleanup() {
   [ "${KEEP:-0}" = 1 ] && { echo "kept containers vabbit-hub-*-$tag (remove: $engine rm -f \$($engine ps -aq --filter name=vabbit-hub-.*-$tag))"; return; }
   for n in "${names[@]}"; do "$engine" exec "$(c "$n")" vabbit leave >/dev/null 2>&1 || true; done
   for n in "${names[@]}"; do "$engine" rm -f "$(c "$n")" >/dev/null 2>&1 || true; done
+  for n in "${names[@]}"; do   # a stopped hub could not run `leave`: remove by name as admin
+    vabbit devices ls 2>/dev/null | awk -v n="e2e-$n" '$2==n{print $1}' | while read -r id; do vabbit devices rm "$id" >/dev/null 2>&1 || true; done
+  done
   "$engine" network rm "$net" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT

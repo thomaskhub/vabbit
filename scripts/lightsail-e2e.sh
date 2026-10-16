@@ -41,13 +41,14 @@ aws_() { aws --region "$region" lightsail "$@"; }
 vms=() hubids=() hubvbs=() hubips=()
 for i in $(seq "$nvm"); do vms+=("vabbit-e2e-$tag-$i"); done
 
+purge() { vabbit devices ls 2>/dev/null | awk -v n="$1" '$2==n{print $1}' | while read -r id; do vabbit devices rm "$id" >/dev/null 2>&1 || true; done; }
 step() { printf '\n== %s\n' "$*"; }
 ok() { echo "ok: $*"; }
 cleanup() {
   rm -rf "$work"
   "$engine" exec "$ctr" vabbit leave >/dev/null 2>&1 || true
   [ "${KEEP:-0}" = 1 ] || "$engine" rm -f "$ctr" >/dev/null 2>&1 || true
-  for id in "${hubids[@]}"; do vabbit devices rm "$id" >/dev/null 2>&1 || true; done
+  for n in e2e-hub1 e2e-hub2 $clientname; do purge "$n" 2>/dev/null || true; done
   for vm in "${created[@]}"; do
     if [ "${KEEP:-0}" = 1 ]; then
       echo "kept VM $vm; delete with: aws --region $region lightsail delete-instance --instance-name $vm"
@@ -102,6 +103,10 @@ else
     chmod +x "$bin.tmp"; mv "$bin.tmp" "$bin"
   fi
 fi
+
+step "remove stale test devices"
+for n in e2e-hub1 e2e-hub2 $clientname; do purge "$n"; done   # else a leftover entry is mistaken for the new VM
+ok "done"
 
 step "setup keys"
 mkkey() {
